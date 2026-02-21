@@ -1,0 +1,1237 @@
+classdef DelsysNoiseMaster < matlab.apps.AppBase
+
+    % =========================================================================
+    % DELSYS NOISE MASTER - Gelişmiş EMG Gürültü Giderme Uygulaması
+    % =========================================================================
+    % Yazar  : Claude (Anthropic) - Kullanıcı talebi üzerine üretilmiştir
+    % Versiyon: 1.0
+    % Tarih  : 2026
+    %
+    % AÇIKLAMA:
+    %   Bu uygulama Delsys sensörlerinden gelen EMG (Elektromiyografi) sinyallerini
+    %   yükleyip, çeşitli filtre yöntemleriyle gürültüden arındırır ve analiz eder.
+    %   İki ana sekmesi vardır:
+    %     1) Veri İşleme  - Gerçek veri yükleme, filtreleme, görselleştirme
+    %     2) Sentetik Test & Analiz - Yapay EMG üretimi ve karşılaştırma
+    % =========================================================================
+
+    % ---- UI Bileşenleri (App Designer tarafından yönetilir) ----
+    properties (Access = public)
+        UIFigure                    matlab.ui.Figure
+
+        % --- Ana Tab Group ---
+        TabGroup                    matlab.ui.container.TabGroup
+        VeriIslemTab                matlab.ui.container.Tab
+        SentetikTab                 matlab.ui.container.Tab
+
+        % === VERİ İŞLEME SEKMESİ BİLEŞENLERİ ===
+        % Sol Panel - Kontroller
+        LeftPanel_VI                matlab.ui.container.Panel
+        DosyaYukleButton            matlab.ui.control.Button
+        DosyaAdiLabel               matlab.ui.control.Label
+        FiltreGrubu                 matlab.ui.container.Panel
+        FiltreTipiLabel             matlab.ui.control.Label
+        FiltreTipiDD                matlab.ui.control.DropDown
+        BantPassGrubu               matlab.ui.container.Panel
+        DusukKesmeLabel             matlab.ui.control.Label
+        DusukKesmeSlider            matlab.ui.control.Slider
+        DusukKesmeEditField         matlab.ui.control.NumericEditField
+        YuksekKesmeLabel            matlab.ui.control.Label
+        YuksekKesmeSlider           matlab.ui.control.Slider
+        YuksekKesmeEditField        matlab.ui.control.NumericEditField
+        NotchGrubu                  matlab.ui.container.Panel
+        NotchFreqLabel              matlab.ui.control.Label
+        NotchFreqDD                 matlab.ui.control.DropDown
+        NotchQLabel                 matlab.ui.control.Label
+        NotchQSlider                matlab.ui.control.Slider
+        NotchQEditField             matlab.ui.control.NumericEditField
+        WaveletGrubu                matlab.ui.container.Panel
+        WaveletTipLabel             matlab.ui.control.Label
+        WaveletTipDD                matlab.ui.control.DropDown
+        WaveletSeviyeLabel          matlab.ui.control.Label
+        WaveletSeviyeSpinner        matlab.ui.control.Spinner
+        FiltreUygButton             matlab.ui.control.Button
+        ExportCSVButton             matlab.ui.control.Button
+        ExportMATButton             matlab.ui.control.Button
+        MetrikPanel                 matlab.ui.container.Panel
+        SNRLabel                    matlab.ui.control.Label
+        SNRDegLabel                 matlab.ui.control.Label
+        RMSHamLabel                 matlab.ui.control.Label
+        RMSHamDegLabel              matlab.ui.control.Label
+        RMSFiltLabel                matlab.ui.control.Label
+        RMSFiltDegLabel             matlab.ui.control.Label
+        MedFreqHamLabel             matlab.ui.control.Label
+        MedFreqHamDegLabel          matlab.ui.control.Label
+        MedFreqFiltLabel            matlab.ui.control.Label
+        MedFreqFiltDegLabel         matlab.ui.control.Label
+        KanalSecLabel               matlab.ui.control.Label
+        KanalSecDD                  matlab.ui.control.DropDown
+        OrneklemeLabel              matlab.ui.control.Label
+        OrneklemeDegLabel           matlab.ui.control.Label
+
+        % Sağ Panel - Grafikler
+        RightPanel_VI               matlab.ui.container.Panel
+        HamSignalAxes               matlab.ui.control.UIAxes
+        FiltSignalAxes              matlab.ui.control.UIAxes
+        PSDAxes                     matlab.ui.control.UIAxes
+        DurumuLabel                 matlab.ui.control.Label
+
+        % === SENTETİK TEST SEKMESİ BİLEŞENLERİ ===
+        LeftPanel_ST                matlab.ui.container.Panel
+        SentetikOlusturButton       matlab.ui.control.Button
+        SuresiLabel                 matlab.ui.control.Label
+        SuresiSlider                matlab.ui.control.Slider
+        SuresiEditField             matlab.ui.control.NumericEditField
+        OrnFsLabel                  matlab.ui.control.Label
+        OrnFsEditField              matlab.ui.control.NumericEditField
+        GurultuLabel                matlab.ui.control.Label
+        GurultuSlider               matlab.ui.control.Slider
+        GurultuEditField            matlab.ui.control.NumericEditField
+        Seb50HzCheck                matlab.ui.control.CheckBox
+        BaselineCheck               matlab.ui.control.CheckBox
+        SenFiltreTipiDD             matlab.ui.control.DropDown
+        SenFiltreUygButton          matlab.ui.control.Button
+        SenMetrikPanel              matlab.ui.container.Panel
+        SenSNRLabel                 matlab.ui.control.Label
+        SenSNRDegLabel              matlab.ui.control.Label
+        SenRMSLabel                 matlab.ui.control.Label
+        SenRMSDegLabel              matlab.ui.control.Label
+        SenMFLabel                  matlab.ui.control.Label
+        SenMFDegLabel               matlab.ui.control.Label
+        RightPanel_ST               matlab.ui.container.Panel
+        SenHamAxes                  matlab.ui.control.UIAxes
+        SenFiltAxes                 matlab.ui.control.UIAxes
+        SenPSDAxes                  matlab.ui.control.UIAxes
+    end
+
+    % ---- Dahili Veri (Private Properties) ----
+    properties (Access = private)
+        % Gerçek veri için
+        HamSinyal           double      % Yüklenen ham sinyal
+        FiltreliSinyal      double      % Filtrelenmiş sinyal
+        ZamanVektoru        double      % Zaman ekseni
+        OrneklemeFrekans    double = 2000  % Örnekleme frekansı (Hz)
+        KanalAdlari         cell        % CSV'den gelen kanal adları
+        AktifKanal          int32 = 1   % Seçili kanal indeksi
+
+        % Sentetik veri için
+        SenHamSinyal        double
+        SenFiltSinyal       double
+        SenZaman            double
+        SenFs               double = 2000
+        SenTemizSinyal      double      % Gürültüsüz referans (SNR hesabı için)
+
+        % Filtre durumu
+        FiltreUygulandiMi   logical = false
+        SenFiltreUygulandiMi logical = false
+    end
+
+    % =========================================================================
+    %  YARDIMCI (PRIVATE) METODLAR
+    % =========================================================================
+    methods (Access = private)
+
+        % -----------------------------------------------------------------
+        % updateStatus: Durum çubuğunu günceller
+        % -----------------------------------------------------------------
+        function updateStatus(app, msg, tip)
+            % tip: 'bilgi', 'uyari', 'hata'
+            if nargin < 3, tip = 'bilgi'; end
+            switch tip
+                case 'hata'
+                    app.DurumuLabel.Text = ['HATA: ' msg];
+                    app.DurumuLabel.FontColor = [0.8 0.1 0.1];
+                case 'uyari'
+                    app.DurumuLabel.Text = ['UYARI: ' msg];
+                    app.DurumuLabel.FontColor = [0.9 0.6 0.0];
+                otherwise
+                    app.DurumuLabel.Text = msg;
+                    app.DurumuLabel.FontColor = [0.1 0.6 0.1];
+            end
+            drawnow;
+        end
+
+        % -----------------------------------------------------------------
+        % cizHamSinyal: Ham sinyali üst grafikte çizer
+        % -----------------------------------------------------------------
+        function cizHamSinyal(app)
+            cla(app.HamSignalAxes);
+            if isempty(app.HamSinyal), return; end
+            plot(app.HamSignalAxes, app.ZamanVektoru, app.HamSinyal, ...
+                'Color', [0.2 0.4 0.8], 'LineWidth', 0.8);
+            xlabel(app.HamSignalAxes, 'Zaman (s)');
+            ylabel(app.HamSignalAxes, 'Genlik (mV)');
+            title(app.HamSignalAxes, 'Ham EMG Sinyali');
+            grid(app.HamSignalAxes, 'on');
+            app.HamSignalAxes.GridAlpha = 0.3;
+        end
+
+        % -----------------------------------------------------------------
+        % cizFiltreliSinyal: Filtrelenmiş sinyali alt grafikte çizer
+        % -----------------------------------------------------------------
+        function cizFiltreliSinyal(app)
+            cla(app.FiltSignalAxes);
+            if isempty(app.FiltreliSinyal), return; end
+            plot(app.FiltSignalAxes, app.ZamanVektoru, app.HamSinyal, ...
+                'Color', [0.7 0.7 0.7], 'LineWidth', 0.5, 'DisplayName', 'Ham');
+            hold(app.FiltSignalAxes, 'on');
+            plot(app.FiltSignalAxes, app.ZamanVektoru, app.FiltreliSinyal, ...
+                'Color', [0.9 0.3 0.1], 'LineWidth', 1.2, 'DisplayName', 'Filtrelenmiş');
+            hold(app.FiltSignalAxes, 'off');
+            legend(app.FiltSignalAxes, 'Location', 'best', 'FontSize', 8);
+            xlabel(app.FiltSignalAxes, 'Zaman (s)');
+            ylabel(app.FiltSignalAxes, 'Genlik (mV)');
+            title(app.FiltSignalAxes, 'Ham & Filtrelenmiş Sinyal (Karşılaştırma)');
+            grid(app.FiltSignalAxes, 'on');
+            app.FiltSignalAxes.GridAlpha = 0.3;
+        end
+
+        % -----------------------------------------------------------------
+        % cizPSD: Güç Spektral Yoğunluğu grafiği (Welch yöntemi)
+        % -----------------------------------------------------------------
+        function cizPSD(app)
+            cla(app.PSDAxes);
+            if isempty(app.HamSinyal), return; end
+
+            fs = app.OrneklemeFrekans;
+            n  = length(app.HamSinyal);
+            % Welch PSD: pencere boyutu sinyalin ~%50'si
+            win = min(round(n/4), 1024);
+
+            % Ham sinyal PSD
+            [pxx_ham, f_ham] = pwelch(app.HamSinyal, win, [], [], fs);
+            semilogy(app.PSDAxes, f_ham, pxx_ham, ...
+                'Color', [0.2 0.4 0.8], 'LineWidth', 1, 'DisplayName', 'Ham');
+            hold(app.PSDAxes, 'on');
+
+            % Filtrelenmiş sinyal PSD (varsa)
+            if ~isempty(app.FiltreliSinyal)
+                [pxx_filt, f_filt] = pwelch(app.FiltreliSinyal, win, [], [], fs);
+                semilogy(app.PSDAxes, f_filt, pxx_filt, ...
+                    'Color', [0.9 0.3 0.1], 'LineWidth', 1, 'DisplayName', 'Filtrelenmiş');
+            end
+
+            hold(app.PSDAxes, 'off');
+            legend(app.PSDAxes, 'Location', 'best', 'FontSize', 7);
+            xlabel(app.PSDAxes, 'Frekans (Hz)');
+            ylabel(app.PSDAxes, 'PSD (mV²/Hz)');
+            title(app.PSDAxes, 'Güç Spektral Yoğunluğu');
+            grid(app.PSDAxes, 'on');
+            xlim(app.PSDAxes, [0 fs/2]);
+        end
+
+        % -----------------------------------------------------------------
+        % hesaplaVeGosterMetrikler: SNR, RMS, Median Frekans hesaplar
+        % -----------------------------------------------------------------
+        function hesaplaVeGosterMetrikler(app)
+            if isempty(app.HamSinyal), return; end
+            fs = app.OrneklemeFrekans;
+
+            % Ham sinyal metrikleri
+            rms_ham  = rms(app.HamSinyal);
+            mf_ham   = compute_median_freq(app.HamSinyal, fs);
+
+            app.RMSHamDegLabel.Text    = sprintf('%.4f mV', rms_ham);
+            app.MedFreqHamDegLabel.Text = sprintf('%.1f Hz', mf_ham);
+
+            if ~isempty(app.FiltreliSinyal) && app.FiltreUygulandiMi
+                % Filtrelenmiş sinyal metrikleri
+                rms_filt = rms(app.FiltreliSinyal);
+                mf_filt  = compute_median_freq(app.FiltreliSinyal, fs);
+
+                % SNR: gürültü = ham - filtrelenmiş fark
+                gurultu = app.HamSinyal - app.FiltreliSinyal;
+                p_sinyal = mean(app.FiltreliSinyal.^2);
+                p_gurultu = mean(gurultu.^2);
+                if p_gurultu > 0
+                    snr_db = 10 * log10(p_sinyal / p_gurultu);
+                else
+                    snr_db = Inf;
+                end
+
+                app.SNRDegLabel.Text       = sprintf('%.2f dB', snr_db);
+                app.RMSFiltDegLabel.Text   = sprintf('%.4f mV', rms_filt);
+                app.MedFreqFiltDegLabel.Text = sprintf('%.1f Hz', mf_filt);
+            else
+                app.SNRDegLabel.Text       = '-';
+                app.RMSFiltDegLabel.Text   = '-';
+                app.MedFreqFiltDegLabel.Text = '-';
+            end
+        end
+
+        % -----------------------------------------------------------------
+        % guncelleFiltreKontrolleri: Seçili filtreye göre panel görünürlüğü
+        % -----------------------------------------------------------------
+        function guncelleFiltreKontrolleri(app)
+            tip = app.FiltreTipiDD.Value;
+            switch tip
+                case 'Butterworth (Bandpass)'
+                    app.BantPassGrubu.Visible = 'on';
+                    app.NotchGrubu.Visible    = 'off';
+                    app.WaveletGrubu.Visible  = 'off';
+                case 'Notch (50/60 Hz)'
+                    app.BantPassGrubu.Visible = 'off';
+                    app.NotchGrubu.Visible    = 'on';
+                    app.WaveletGrubu.Visible  = 'off';
+                case 'Wavelet (wdenoise)'
+                    app.BantPassGrubu.Visible = 'off';
+                    app.NotchGrubu.Visible    = 'off';
+                    app.WaveletGrubu.Visible  = 'on';
+            end
+        end
+
+        % -----------------------------------------------------------------
+        % uygulaMevFiltreRealTime: Slider her hareket ettiğinde çağrılır
+        % -----------------------------------------------------------------
+        function uygulaMevFiltreRealTime(app)
+            if isempty(app.HamSinyal)
+                return;
+            end
+
+            tip = app.FiltreTipiDD.Value;
+            fs  = app.OrneklemeFrekans;
+
+            try
+                switch tip
+                    case 'Butterworth (Bandpass)'
+                        fc_low  = app.DusukKesmeEditField.Value;
+                        fc_high = app.YuksekKesmeEditField.Value;
+                        params  = struct('low', fc_low, 'high', fc_high, 'order', 4);
+                        app.FiltreliSinyal = advanced_filter(app.HamSinyal, fs, 'butterworth', params);
+
+                    case 'Notch (50/60 Hz)'
+                        f_notch = str2double(app.NotchFreqDD.Value);
+                        q_val   = app.NotchQEditField.Value;
+                        params  = struct('f_notch', f_notch, 'Q', q_val);
+                        app.FiltreliSinyal = advanced_filter(app.HamSinyal, fs, 'notch', params);
+
+                    case 'Wavelet (wdenoise)'
+                        wname  = app.WaveletTipDD.Value;
+                        level  = app.WaveletSeviyeSpinner.Value;
+                        params = struct('wavelet', wname, 'level', level);
+                        app.FiltreliSinyal = advanced_filter(app.HamSinyal, fs, 'wavelet', params);
+                end
+
+                app.FiltreUygulandiMi = true;
+                cizFiltreliSinyal(app);
+                cizPSD(app);
+                hesaplaVeGosterMetrikler(app);
+
+            catch ME
+                updateStatus(app, ME.message, 'hata');
+            end
+        end
+
+        % -----------------------------------------------------------------
+        % sentetikCiz: Sentetik sekmedeki grafikleri günceller
+        % -----------------------------------------------------------------
+        function sentetikCiz(app)
+            % Ham sentetik
+            cla(app.SenHamAxes);
+            if isempty(app.SenHamSinyal), return; end
+            plot(app.SenHamAxes, app.SenZaman, app.SenHamSinyal, ...
+                'Color', [0.2 0.4 0.8], 'LineWidth', 0.7);
+            if ~isempty(app.SenTemizSinyal)
+                hold(app.SenHamAxes, 'on');
+                plot(app.SenHamAxes, app.SenZaman, app.SenTemizSinyal, ...
+                    'Color', [0 0.7 0], 'LineWidth', 1, 'LineStyle', '--', ...
+                    'DisplayName', 'Temiz Referans');
+                legend(app.SenHamAxes, {'Gürültülü', 'Temiz'}, ...
+                    'Location', 'best', 'FontSize', 7);
+                hold(app.SenHamAxes, 'off');
+            end
+            xlabel(app.SenHamAxes, 'Zaman (s)');
+            ylabel(app.SenHamAxes, 'Genlik (mV)');
+            title(app.SenHamAxes, 'Sentetik Ham EMG (Gürültülü)');
+            grid(app.SenHamAxes, 'on');
+
+            % Filtrelenmiş sentetik
+            cla(app.SenFiltAxes);
+            if ~isempty(app.SenFiltSinyal)
+                plot(app.SenFiltAxes, app.SenZaman, app.SenFiltSinyal, ...
+                    'Color', [0.9 0.3 0.1], 'LineWidth', 1);
+                xlabel(app.SenFiltAxes, 'Zaman (s)');
+                ylabel(app.SenFiltAxes, 'Genlik (mV)');
+                title(app.SenFiltAxes, 'Filtrelenmiş Sentetik EMG');
+                grid(app.SenFiltAxes, 'on');
+            end
+
+            % PSD - sentetik
+            cla(app.SenPSDAxes);
+            win = min(round(length(app.SenHamSinyal)/4), 1024);
+            [pxx, f] = pwelch(app.SenHamSinyal, win, [], [], app.SenFs);
+            semilogy(app.SenPSDAxes, f, pxx, 'Color', [0.2 0.4 0.8], ...
+                'LineWidth', 1, 'DisplayName', 'Ham');
+            hold(app.SenPSDAxes, 'on');
+            if ~isempty(app.SenFiltSinyal)
+                [pxx_f, f_f] = pwelch(app.SenFiltSinyal, win, [], [], app.SenFs);
+                semilogy(app.SenPSDAxes, f_f, pxx_f, 'Color', [0.9 0.3 0.1], ...
+                    'LineWidth', 1, 'DisplayName', 'Filtrelenmiş');
+            end
+            hold(app.SenPSDAxes, 'off');
+            legend(app.SenPSDAxes, 'Location', 'best', 'FontSize', 7);
+            xlabel(app.SenPSDAxes, 'Frekans (Hz)');
+            ylabel(app.SenPSDAxes, 'PSD');
+            title(app.SenPSDAxes, 'Güç Spektral Yoğunluğu (Sentetik)');
+            grid(app.SenPSDAxes, 'on');
+            xlim(app.SenPSDAxes, [0 app.SenFs/2]);
+        end
+
+    end  % private methods
+
+    % =========================================================================
+    %  CALLBACK METODLAR (Kullanıcı etkileşimleri)
+    % =========================================================================
+    methods (Access = private)
+
+        % -----------------------------------------------------------------
+        % DosyaYukleButton_Callback: CSV veya MAT dosyası yükler
+        % -----------------------------------------------------------------
+        function DosyaYukleButtonPushed(app, ~)
+            [fname, fpath] = uigetfile({'*.csv','CSV Dosyası (*.csv)'; ...
+                                         '*.mat','MAT Dosyası (*.mat)'; ...
+                                         '*.*','Tüm Dosyalar'}, ...
+                                         'EMG Dosyası Seç');
+            if isequal(fname, 0)
+                return;  % Kullanıcı iptal etti
+            end
+
+            fullpath = fullfile(fpath, fname);
+            updateStatus(app, ['Yükleniyor: ' fname]);
+
+            try
+                [~, ~, ext] = fileparts(fname);
+
+                if strcmpi(ext, '.csv')
+                    % ---- CSV okuma ----
+                    % İlk satır başlık olabilir; try ile dene
+                    try
+                        T = readtable(fullpath, 'VariableNamingRule', 'preserve');
+                        % Numerik sütunları bul
+                        numCols = varfun(@isnumeric, T, 'OutputFormat', 'uniform');
+                        numData = T{:, numCols};
+                        colNames = T.Properties.VariableNames(numCols);
+                    catch
+                        % Başlıksız CSV
+                        numData  = readmatrix(fullpath);
+                        colNames = arrayfun(@(x) sprintf('Kanal_%d', x), ...
+                                           1:size(numData,2), 'UniformOutput', false);
+                    end
+
+                    % İlk sütun zaman mı kontrol et (monoton artan)
+                    if size(numData, 2) > 1 && ...
+                            all(diff(numData(:,1)) > 0)
+                        t_col   = numData(:, 1);
+                        sigData = numData(:, 2:end);
+                        % Örnekleme frekansını zaman sütunundan hesapla
+                        dt = mean(diff(t_col));
+                        app.OrneklemeFrekans = round(1 / dt);
+                        app.KanalAdlari = colNames(2:end);
+                    else
+                        % Zaman sütunu yok, varsayılan fs kullan
+                        t_col   = [];
+                        sigData = numData;
+                        app.KanalAdlari = colNames;
+                    end
+
+                elseif strcmpi(ext, '.mat')
+                    % ---- MAT okuma ----
+                    S = load(fullpath);
+                    fields = fieldnames(S);
+
+                    % Olası field adlarını ara: data, emg, signal, vs.
+                    dataField = '';
+                    fsField   = '';
+                    for i = 1:length(fields)
+                        fn = lower(fields{i});
+                        if any(strcmp(fn, {'data','emg','signal','signals','y','raw'}))
+                            dataField = fields{i};
+                        end
+                        if any(strcmp(fn, {'fs','samplerate','sr','fsamp','frequency'}))
+                            fsField = fields{i};
+                        end
+                    end
+
+                    if isempty(dataField)
+                        % İlk nümerik alanı kullan
+                        for i = 1:length(fields)
+                            if isnumeric(S.(fields{i}))
+                                dataField = fields{i};
+                                break;
+                            end
+                        end
+                    end
+
+                    if isempty(dataField)
+                        error('MAT dosyasında uygun sinyal verisi bulunamadı.');
+                    end
+
+                    sigData = double(S.(dataField));
+
+                    if ~isempty(fsField)
+                        app.OrneklemeFrekans = double(S.(fsField));
+                    end
+                    % Kanal adları
+                    app.KanalAdlari = arrayfun(@(x) sprintf('Kanal_%d', x), ...
+                                               1:size(sigData,2), 'UniformOutput', false);
+                    t_col = [];
+                else
+                    error('Desteklenmeyen dosya formatı: %s', ext);
+                end
+
+                % Sinyali sütun vektörüne çevir (her sütun bir kanal)
+                if size(sigData, 1) < size(sigData, 2)
+                    sigData = sigData';  % Transpoze et
+                end
+
+                % Zaman vektörü oluştur
+                N  = size(sigData, 1);
+                fs = app.OrneklemeFrekans;
+                if isempty(t_col)
+                    app.ZamanVektoru = (0:N-1)' / fs;
+                else
+                    app.ZamanVektoru = t_col;
+                end
+
+                % İlk kanalı aktif kanal olarak yükle
+                app.HamSinyal       = sigData(:, 1);
+                app.FiltreliSinyal  = [];
+                app.FiltreUygulandiMi = false;
+
+                % Kanal seçici DropDown'u güncelle
+                app.KanalSecDD.Items     = app.KanalAdlari;
+                app.KanalSecDD.ItemsData = num2cell(1:length(app.KanalAdlari));
+                app.AktifKanal           = 1;
+
+                % Örnekleme frekansını göster
+                app.OrneklemeDegLabel.Text = sprintf('%d Hz', fs);
+
+                % Dosya adını göster
+                app.DosyaAdiLabel.Text = fname;
+
+                % Grafikleri çiz
+                cizHamSinyal(app);
+                cla(app.FiltSignalAxes);
+                cizPSD(app);
+                hesaplaVeGosterMetrikler(app);
+                updateStatus(app, sprintf('Dosya yüklendi: %s | %d örnek | %d kanal', ...
+                    fname, N, size(sigData,2)));
+
+            catch ME
+                updateStatus(app, ME.message, 'hata');
+            end
+        end
+
+        % -----------------------------------------------------------------
+        % KanalSecDD_Callback: Kanal değiştirildiğinde
+        % -----------------------------------------------------------------
+        function KanalSecDDValueChanged(app, ~)
+            if isempty(app.KanalAdlari), return; end
+            idx = app.KanalSecDD.Value;
+            % Kanal verisini yeniden yükle gerekirse (basit versiyon: re-load)
+            % Bu versiyonda her kanal için veriyi tekrar yüklememek adına
+            % kullanıcıdan dosyayı tekrar yüklemesini bekleriz.
+            % Gelişmiş versiyonda tüm kanallar app property'de tutulabilir.
+            app.AktifKanal = idx;
+            updateStatus(app, sprintf('Kanal %d seçildi. Filtreyi tekrar uygulayın.', idx), 'uyari');
+        end
+
+        % -----------------------------------------------------------------
+        % FiltreTipiDD_Callback: Filtre tipi değişince panelleri göster/gizle
+        % -----------------------------------------------------------------
+        function FiltreTipiDDValueChanged(app, ~)
+            guncelleFiltreKontrolleri(app);
+            % Real-time güncelleme
+            if ~isempty(app.HamSinyal)
+                uygulaMevFiltreRealTime(app);
+            end
+        end
+
+        % -----------------------------------------------------------------
+        % DusukKesmeSlider_Callback: Bandpass alt kesme frekansı slider
+        % -----------------------------------------------------------------
+        function DusukKesmeSliderValueChanged(app, ~)
+            app.DusukKesmeEditField.Value = round(app.DusukKesmeSlider.Value);
+            % Üst kesme < alt kesme ise düzelt
+            if app.DusukKesmeEditField.Value >= app.YuksekKesmeEditField.Value
+                app.DusukKesmeEditField.Value = app.YuksekKesmeEditField.Value - 1;
+                app.DusukKesmeSlider.Value    = app.DusukKesmeEditField.Value;
+            end
+            uygulaMevFiltreRealTime(app);
+        end
+
+        function DusukKesmeEditFieldValueChanged(app, ~)
+            val = app.DusukKesmeEditField.Value;
+            val = max(1, min(val, app.YuksekKesmeEditField.Value - 1));
+            app.DusukKesmeEditField.Value = val;
+            app.DusukKesmeSlider.Value    = val;
+            uygulaMevFiltreRealTime(app);
+        end
+
+        % -----------------------------------------------------------------
+        % YuksekKesmeSlider_Callback: Bandpass üst kesme frekansı slider
+        % -----------------------------------------------------------------
+        function YuksekKesmeSliderValueChanged(app, ~)
+            app.YuksekKesmeEditField.Value = round(app.YuksekKesmeSlider.Value);
+            if app.YuksekKesmeEditField.Value <= app.DusukKesmeEditField.Value
+                app.YuksekKesmeEditField.Value = app.DusukKesmeEditField.Value + 1;
+                app.YuksekKesmeSlider.Value    = app.YuksekKesmeEditField.Value;
+            end
+            uygulaMevFiltreRealTime(app);
+        end
+
+        function YuksekKesmeEditFieldValueChanged(app, ~)
+            val = app.YuksekKesmeEditField.Value;
+            fs  = app.OrneklemeFrekans;
+            val = max(app.DusukKesmeEditField.Value + 1, min(val, fs/2 - 1));
+            app.YuksekKesmeEditField.Value = val;
+            app.YuksekKesmeSlider.Value    = val;
+            uygulaMevFiltreRealTime(app);
+        end
+
+        % -----------------------------------------------------------------
+        % NotchQ Slider
+        % -----------------------------------------------------------------
+        function NotchQSliderValueChanged(app, ~)
+            app.NotchQEditField.Value = round(app.NotchQSlider.Value);
+            uygulaMevFiltreRealTime(app);
+        end
+
+        function NotchQEditFieldValueChanged(app, ~)
+            app.NotchQSlider.Value = app.NotchQEditField.Value;
+            uygulaMevFiltreRealTime(app);
+        end
+
+        function NotchFreqDDValueChanged(app, ~)
+            uygulaMevFiltreRealTime(app);
+        end
+
+        % -----------------------------------------------------------------
+        % WaveletSeviye Spinner
+        % -----------------------------------------------------------------
+        function WaveletSeviyeSpinnerValueChanged(app, ~)
+            uygulaMevFiltreRealTime(app);
+        end
+
+        function WaveletTipDDValueChanged(app, ~)
+            uygulaMevFiltreRealTime(app);
+        end
+
+        % -----------------------------------------------------------------
+        % FiltreUygButton_Callback: Manuel filtre uygula butonu
+        % -----------------------------------------------------------------
+        function FiltreUygButtonPushed(app, ~)
+            if isempty(app.HamSinyal)
+                updateStatus(app, 'Önce bir dosya yükleyin!', 'uyari');
+                return;
+            end
+            uygulaMevFiltreRealTime(app);
+            updateStatus(app, 'Filtre uygulandı.');
+        end
+
+        % -----------------------------------------------------------------
+        % ExportCSV_Callback: Filtrelenmiş veriyi CSV olarak kaydet
+        % -----------------------------------------------------------------
+        function ExportCSVButtonPushed(app, ~)
+            if isempty(app.FiltreliSinyal)
+                updateStatus(app, 'Önce filtreleme yapın!', 'uyari');
+                return;
+            end
+
+            [fname, fpath] = uiputfile('*.csv', 'CSV olarak kaydet', ...
+                                        'filtrelenmis_emg.csv');
+            if isequal(fname, 0), return; end
+
+            try
+                % Zaman ve filtrelenmiş sinyali tablo olarak kaydet
+                T = table(app.ZamanVektoru, app.HamSinyal, app.FiltreliSinyal, ...
+                          'VariableNames', {'Zaman_s', 'Ham_mV', 'Filtrelenmis_mV'});
+                writetable(T, fullfile(fpath, fname));
+                updateStatus(app, ['CSV kaydedildi: ' fname]);
+            catch ME
+                updateStatus(app, ME.message, 'hata');
+            end
+        end
+
+        % -----------------------------------------------------------------
+        % ExportMAT_Callback: Filtrelenmiş veriyi MAT olarak kaydet
+        % -----------------------------------------------------------------
+        function ExportMATButtonPushed(app, ~)
+            if isempty(app.FiltreliSinyal)
+                updateStatus(app, 'Önce filtreleme yapın!', 'uyari');
+                return;
+            end
+
+            [fname, fpath] = uiputfile('*.mat', 'MAT olarak kaydet', ...
+                                        'filtrelenmis_emg.mat');
+            if isequal(fname, 0), return; end
+
+            try
+                % Tüm ilgili verileri kaydet
+                zaman         = app.ZamanVektoru;          %#ok<NASGU>
+                ham_sinyal    = app.HamSinyal;              %#ok<NASGU>
+                filt_sinyal   = app.FiltreliSinyal;         %#ok<NASGU>
+                fs            = app.OrneklemeFrekans;       %#ok<NASGU>
+                filtre_tipi   = app.FiltreTipiDD.Value;     %#ok<NASGU>
+                save(fullfile(fpath, fname), ...
+                     'zaman', 'ham_sinyal', 'filt_sinyal', 'fs', 'filtre_tipi');
+                updateStatus(app, ['MAT kaydedildi: ' fname]);
+            catch ME
+                updateStatus(app, ME.message, 'hata');
+            end
+        end
+
+        % -----------------------------------------------------------------
+        % SentetikOlusturButton_Callback: Yapay EMG sinyali oluştur
+        % -----------------------------------------------------------------
+        function SentetikOlusturButtonPushed(app, ~)
+            fs          = app.OrnFsEditField.Value;
+            sure        = app.SuresiEditField.Value;
+            gurultu_sev = app.GurultuEditField.Value / 100;  % 0-1 aralığı
+            add_50hz    = app.Seb50HzCheck.Value;
+            add_bl      = app.BaselineCheck.Value;
+
+            app.SenFs = fs;
+
+            updateStatus(app, 'Sentetik EMG oluşturuluyor...');
+
+            try
+                % Yardımcı fonksiyon çağrısı
+                [ham, temiz, t] = generate_synthetic_emg(fs, sure, gurultu_sev, ...
+                                                          add_50hz, add_bl);
+                app.SenHamSinyal    = ham;
+                app.SenTemizSinyal  = temiz;
+                app.SenZaman        = t;
+                app.SenFiltSinyal   = [];
+                app.SenFiltreUygulandiMi = false;
+
+                sentetikCiz(app);
+                updateStatus(app, sprintf('Sentetik EMG oluşturuldu: %d Hz | %.1f s', fs, sure));
+
+                % Sentetik metrikler
+                app.SenSNRDegLabel.Text = '-';
+                app.SenRMSDegLabel.Text = sprintf('%.4f mV', rms(ham));
+                app.SenMFDegLabel.Text  = sprintf('%.1f Hz', compute_median_freq(ham, fs));
+
+            catch ME
+                updateStatus(app, ME.message, 'hata');
+            end
+        end
+
+        % Süre slider/editfield senkronizasyonu
+        function SuresiSliderValueChanged(app, ~)
+            app.SuresiEditField.Value = round(app.SuresiSlider.Value * 10) / 10;
+        end
+        function SuresiEditFieldValueChanged(app, ~)
+            app.SuresiSlider.Value = app.SuresiEditField.Value;
+        end
+
+        % Gürültü slider/editfield senkronizasyonu
+        function GurultuSliderValueChanged(app, ~)
+            app.GurultuEditField.Value = round(app.GurultuSlider.Value);
+        end
+        function GurultuEditFieldValueChanged(app, ~)
+            app.GurultuSlider.Value = app.GurultuEditField.Value;
+        end
+
+        % -----------------------------------------------------------------
+        % SenFiltreUygButton_Callback: Sentetik sinyale filtre uygula
+        % -----------------------------------------------------------------
+        function SenFiltreUygButtonPushed(app, ~)
+            if isempty(app.SenHamSinyal)
+                updateStatus(app, 'Önce sentetik sinyal oluşturun!', 'uyari');
+                return;
+            end
+
+            fs  = app.SenFs;
+            tip = app.SenFiltreTipiDD.Value;
+
+            try
+                switch tip
+                    case 'Butterworth (Bandpass)'
+                        params = struct('low', 20, 'high', 450, 'order', 4);
+                        app.SenFiltSinyal = advanced_filter(app.SenHamSinyal, fs, 'butterworth', params);
+                    case 'Notch (50 Hz)'
+                        params = struct('f_notch', 50, 'Q', 35);
+                        app.SenFiltSinyal = advanced_filter(app.SenHamSinyal, fs, 'notch', params);
+                    case 'Wavelet (db4)'
+                        params = struct('wavelet', 'db4', 'level', 5);
+                        app.SenFiltSinyal = advanced_filter(app.SenHamSinyal, fs, 'wavelet', params);
+                    case 'Tam Zincir (BP + Notch)'
+                        % Önce bandpass
+                        p1 = struct('low', 20, 'high', 450, 'order', 4);
+                        ara = advanced_filter(app.SenHamSinyal, fs, 'butterworth', p1);
+                        % Sonra notch
+                        p2 = struct('f_notch', 50, 'Q', 35);
+                        app.SenFiltSinyal = advanced_filter(ara, fs, 'notch', p2);
+                end
+
+                app.SenFiltreUygulandiMi = true;
+
+                % SNR hesapla (temiz referansa karşı)
+                if ~isempty(app.SenTemizSinyal)
+                    p_sig  = mean(app.SenTemizSinyal.^2);
+                    gurult = app.SenFiltSinyal - app.SenTemizSinyal;
+                    p_gur  = mean(gurult.^2);
+                    if p_gur > 0
+                        snr_db = 10 * log10(p_sig / p_gur);
+                    else
+                        snr_db = Inf;
+                    end
+                    app.SenSNRDegLabel.Text = sprintf('%.2f dB', snr_db);
+                end
+
+                app.SenRMSDegLabel.Text = sprintf('%.4f mV', rms(app.SenFiltSinyal));
+                app.SenMFDegLabel.Text  = sprintf('%.1f Hz', compute_median_freq(app.SenFiltSinyal, fs));
+
+                sentetikCiz(app);
+                updateStatus(app, 'Sentetik sinyal filtrelendi.');
+
+            catch ME
+                updateStatus(app, ME.message, 'hata');
+            end
+        end
+
+    end  % callback methods
+
+    % =========================================================================
+    %  COMPONENT INITIALIZATION (createComponents)
+    % =========================================================================
+    methods (Access = private)
+
+        function createComponents(app)
+
+            % ---- Ana Figür ----
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 50 1280 780];
+            app.UIFigure.Name     = 'Delsys Noise Master v1.0';
+            app.UIFigure.Color    = [0.95 0.95 0.97];
+            app.UIFigure.Resize   = 'on';
+
+            % Başlık etiketi
+            titleLbl = uilabel(app.UIFigure, ...
+                'Text', 'DELSYS NOISE MASTER — Gelişmiş EMG Gürültü Giderme', ...
+                'Position', [20 740 900 30], ...
+                'FontSize', 16, 'FontWeight', 'bold', ...
+                'FontColor', [0.15 0.25 0.55]);
+
+            % Durum etiketi (alt)
+            app.DurumuLabel = uilabel(app.UIFigure, ...
+                'Text', 'Hazır. Bir dosya yükleyin veya sentetik sinyal oluşturun.', ...
+                'Position', [20 10 1240 22], ...
+                'FontSize', 10, 'FontColor', [0.1 0.6 0.1], ...
+                'BackgroundColor', [0.88 0.95 0.88]);
+
+            % ---- Tab Group ----
+            app.TabGroup = uitabgroup(app.UIFigure, ...
+                'Position', [10 35 1260 700]);
+
+            % ===================================================================
+            %  TAB 1: VERİ İŞLEME
+            % ===================================================================
+            app.VeriIslemTab = uitab(app.TabGroup, 'Title', '  Veri İşleme  ');
+
+            % --- Sol Kontrol Paneli ---
+            app.LeftPanel_VI = uipanel(app.VeriIslemTab, ...
+                'Title', 'Kontrol Paneli', ...
+                'Position', [5 5 280 665], ...
+                'FontWeight', 'bold', 'FontSize', 11);
+
+            % Dosya yükleme
+            uilabel(app.LeftPanel_VI, 'Text', 'VERİ KAYNAĞI', ...
+                'Position', [5 625 200 20], 'FontWeight', 'bold', ...
+                'FontColor', [0.3 0.3 0.6]);
+
+            app.DosyaYukleButton = uibutton(app.LeftPanel_VI, 'push', ...
+                'Text', '  Dosya Yükle (CSV / MAT)', ...
+                'Position', [5 595 265 30], ...
+                'FontSize', 11, 'FontWeight', 'bold', ...
+                'BackgroundColor', [0.2 0.4 0.8], 'FontColor', 'white', ...
+                'ButtonPushedFcn', createCallbackFcn(app, @DosyaYukleButtonPushed, true));
+
+            app.DosyaAdiLabel = uilabel(app.LeftPanel_VI, ...
+                'Text', '(dosya seçilmedi)', ...
+                'Position', [5 575 265 18], 'FontSize', 9, ...
+                'FontColor', [0.5 0.5 0.5]);
+
+            % Kanal seçimi
+            uilabel(app.LeftPanel_VI, 'Text', 'Kanal:', ...
+                'Position', [5 550 60 20]);
+            app.KanalSecDD = uidropdown(app.LeftPanel_VI, ...
+                'Items', {'(veri yok)'}, ...
+                'Position', [65 550 200 22], ...
+                'ValueChangedFcn', createCallbackFcn(app, @KanalSecDDValueChanged, true));
+
+            % Örnekleme frekansı göstergesi
+            uilabel(app.LeftPanel_VI, 'Text', 'Örnekleme Fs:', ...
+                'Position', [5 525 120 20]);
+            app.OrneklemeDegLabel = uilabel(app.LeftPanel_VI, ...
+                'Text', '2000 Hz', ...
+                'Position', [130 525 135 20], 'FontWeight', 'bold', ...
+                'FontColor', [0.2 0.5 0.2]);
+
+            % ---- Filtre Kontrolleri ----
+            uilabel(app.LeftPanel_VI, 'Text', 'FİLTRE AYARLARI', ...
+                'Position', [5 498 200 20], 'FontWeight', 'bold', ...
+                'FontColor', [0.3 0.3 0.6]);
+
+            uilabel(app.LeftPanel_VI, 'Text', 'Filtre Tipi:', ...
+                'Position', [5 473 80 20]);
+            app.FiltreTipiDD = uidropdown(app.LeftPanel_VI, ...
+                'Items', {'Butterworth (Bandpass)', 'Notch (50/60 Hz)', 'Wavelet (wdenoise)'}, ...
+                'Position', [5 450 265 24], ...
+                'ValueChangedFcn', createCallbackFcn(app, @FiltreTipiDDValueChanged, true));
+
+            % -- Butterworth Panel --
+            app.BantPassGrubu = uipanel(app.LeftPanel_VI, ...
+                'Title', 'Butterworth Parametreleri', ...
+                'Position', [3 315 270 135], ...
+                'FontSize', 9, 'FontWeight', 'bold');
+
+            uilabel(app.BantPassGrubu, 'Text', 'Alt Kesme (Hz):', ...
+                'Position', [5 98 130 18]);
+            app.DusukKesmeEditField = uieditfield(app.BantPassGrubu, 'numeric', ...
+                'Value', 20, 'Limits', [1 498], ...
+                'Position', [220 98 45 22], ...
+                'ValueChangedFcn', createCallbackFcn(app, @DusukKesmeEditFieldValueChanged, true));
+            app.DusukKesmeSlider = uislider(app.BantPassGrubu, ...
+                'Limits', [1 498], 'Value', 20, ...
+                'Position', [5 90 260 3], ...
+                'ValueChangedFcn', createCallbackFcn(app, @DusukKesmeSliderValueChanged, true));
+
+            uilabel(app.BantPassGrubu, 'Text', 'Üst Kesme (Hz):', ...
+                'Position', [5 55 130 18]);
+            app.YuksekKesmeEditField = uieditfield(app.BantPassGrubu, 'numeric', ...
+                'Value', 450, 'Limits', [2 499], ...
+                'Position', [220 55 45 22], ...
+                'ValueChangedFcn', createCallbackFcn(app, @YuksekKesmeEditFieldValueChanged, true));
+            app.YuksekKesmeSlider = uislider(app.BantPassGrubu, ...
+                'Limits', [2 499], 'Value', 450, ...
+                'Position', [5 47 260 3], ...
+                'ValueChangedFcn', createCallbackFcn(app, @YuksekKesmeSliderValueChanged, true));
+
+            uilabel(app.BantPassGrubu, 'Text', 'Standart EMG bandı: 20 - 450 Hz', ...
+                'Position', [5 8 260 18], 'FontSize', 8, ...
+                'FontColor', [0.5 0.5 0.5]);
+
+            % -- Notch Panel --
+            app.NotchGrubu = uipanel(app.LeftPanel_VI, ...
+                'Title', 'Notch Parametreleri', ...
+                'Position', [3 315 270 135], ...
+                'FontSize', 9, 'FontWeight', 'bold', 'Visible', 'off');
+
+            uilabel(app.NotchGrubu, 'Text', 'Notch Frekansı:', ...
+                'Position', [5 95 120 20]);
+            app.NotchFreqDD = uidropdown(app.NotchGrubu, ...
+                'Items', {'50', '60'}, 'Value', '50', ...
+                'Position', [130 95 80 24], ...
+                'ValueChangedFcn', createCallbackFcn(app, @NotchFreqDDValueChanged, true));
+            uilabel(app.NotchGrubu, 'Text', 'Hz', ...
+                'Position', [215 95 30 20]);
+
+            uilabel(app.NotchGrubu, 'Text', 'Q faktörü:', ...
+                'Position', [5 55 100 20]);
+            app.NotchQEditField = uieditfield(app.NotchGrubu, 'numeric', ...
+                'Value', 35, 'Limits', [5 100], ...
+                'Position', [220 55 45 22], ...
+                'ValueChangedFcn', createCallbackFcn(app, @NotchQEditFieldValueChanged, true));
+            app.NotchQSlider = uislider(app.NotchGrubu, ...
+                'Limits', [5 100], 'Value', 35, ...
+                'Position', [5 48 260 3], ...
+                'ValueChangedFcn', createCallbackFcn(app, @NotchQSliderValueChanged, true));
+            uilabel(app.NotchGrubu, 'Text', 'Yüksek Q = daha dar bant', ...
+                'Position', [5 8 260 18], 'FontSize', 8, ...
+                'FontColor', [0.5 0.5 0.5]);
+
+            % -- Wavelet Panel --
+            app.WaveletGrubu = uipanel(app.LeftPanel_VI, ...
+                'Title', 'Wavelet Parametreleri', ...
+                'Position', [3 315 270 135], ...
+                'FontSize', 9, 'FontWeight', 'bold', 'Visible', 'off');
+
+            uilabel(app.WaveletGrubu, 'Text', 'Wavelet Ailesi:', ...
+                'Position', [5 95 120 20]);
+            app.WaveletTipDD = uidropdown(app.WaveletGrubu, ...
+                'Items', {'db4','db6','sym4','sym6','coif3','bior3.5'}, ...
+                'Value', 'db4', ...
+                'Position', [5 70 140 24], ...
+                'ValueChangedFcn', createCallbackFcn(app, @WaveletTipDDValueChanged, true));
+
+            uilabel(app.WaveletGrubu, 'Text', 'Ayrışım Seviyesi:', ...
+                'Position', [155 95 110 20]);
+            app.WaveletSeviyeSpinner = uispinner(app.WaveletGrubu, ...
+                'Value', 5, 'Limits', [1 10], 'Step', 1, ...
+                'Position', [160 70 100 24], ...
+                'ValueChangedFcn', createCallbackFcn(app, @WaveletSeviyeSpinnerValueChanged, true));
+
+            uilabel(app.WaveletGrubu, 'Text', 'wdenoise ile SURE eşiği kullanılır', ...
+                'Position', [5 8 260 18], 'FontSize', 8, ...
+                'FontColor', [0.5 0.5 0.5]);
+
+            % Filtre Uygula butonu
+            app.FiltreUygButton = uibutton(app.LeftPanel_VI, 'push', ...
+                'Text', '  Filtreyi Uygula', ...
+                'Position', [5 283 265 30], ...
+                'FontSize', 11, 'FontWeight', 'bold', ...
+                'BackgroundColor', [0.1 0.6 0.2], 'FontColor', 'white', ...
+                'ButtonPushedFcn', createCallbackFcn(app, @FiltreUygButtonPushed, true));
+
+            % Export butonları
+            uilabel(app.LeftPanel_VI, 'Text', 'EXPORT', ...
+                'Position', [5 253 200 20], 'FontWeight', 'bold', ...
+                'FontColor', [0.3 0.3 0.6]);
+
+            app.ExportCSVButton = uibutton(app.LeftPanel_VI, 'push', ...
+                'Text', 'CSV Kaydet', ...
+                'Position', [5 228 128 26], ...
+                'BackgroundColor', [0.6 0.4 0.8], 'FontColor', 'white', ...
+                'FontWeight', 'bold', ...
+                'ButtonPushedFcn', createCallbackFcn(app, @ExportCSVButtonPushed, true));
+
+            app.ExportMATButton = uibutton(app.LeftPanel_VI, 'push', ...
+                'Text', 'MAT Kaydet', ...
+                'Position', [140 228 130 26], ...
+                'BackgroundColor', [0.6 0.4 0.8], 'FontColor', 'white', ...
+                'FontWeight', 'bold', ...
+                'ButtonPushedFcn', createCallbackFcn(app, @ExportMATButtonPushed, true));
+
+            % ---- Metrik Paneli ----
+            app.MetrikPanel = uipanel(app.LeftPanel_VI, ...
+                'Title', 'Sinyal Metrikleri', ...
+                'Position', [3 5 270 215], ...
+                'FontSize', 10, 'FontWeight', 'bold');
+
+            metrik_labels = {'SNR (dB):', 'RMS Ham (mV):', 'RMS Filt (mV):', ...
+                             'Med.Freq Ham (Hz):', 'Med.Freq Filt (Hz):'};
+            metrik_degs   = {'-', '-', '-', '-', '-'};
+            metrik_props  = {'SNRDegLabel', 'RMSHamDegLabel', 'RMSFiltDegLabel', ...
+                             'MedFreqHamDegLabel', 'MedFreqFiltDegLabel'};
+
+            for mi = 1:5
+                y_pos = 185 - (mi-1)*35;
+                uilabel(app.MetrikPanel, 'Text', metrik_labels{mi}, ...
+                    'Position', [5 y_pos 130 20], 'FontSize', 9, ...
+                    'FontWeight', 'bold');
+                app.(metrik_props{mi}) = uilabel(app.MetrikPanel, ...
+                    'Text', metrik_degs{mi}, ...
+                    'Position', [140 y_pos 125 20], 'FontSize', 10, ...
+                    'FontColor', [0.8 0.3 0.1], 'FontWeight', 'bold');
+            end
+
+            % --- Sağ Grafik Paneli ---
+            app.RightPanel_VI = uipanel(app.VeriIslemTab, ...
+                'Title', '', ...
+                'Position', [292 5 960 665], ...
+                'BorderType', 'none');
+
+            % Ham sinyal grafiği
+            app.HamSignalAxes = uiaxes(app.RightPanel_VI, ...
+                'Position', [5 445 950 210]);
+            title(app.HamSignalAxes, 'Ham EMG Sinyali');
+            xlabel(app.HamSignalAxes, 'Zaman (s)');
+            ylabel(app.HamSignalAxes, 'Genlik (mV)');
+            grid(app.HamSignalAxes, 'on');
+
+            % Filtrelenmiş sinyal grafiği
+            app.FiltSignalAxes = uiaxes(app.RightPanel_VI, ...
+                'Position', [5 225 950 210]);
+            title(app.FiltSignalAxes, 'Filtrelenmiş Sinyal');
+            xlabel(app.FiltSignalAxes, 'Zaman (s)');
+            ylabel(app.FiltSignalAxes, 'Genlik (mV)');
+            grid(app.FiltSignalAxes, 'on');
+
+            % PSD grafiği (küçük)
+            app.PSDAxes = uiaxes(app.RightPanel_VI, ...
+                'Position', [5 5 950 210]);
+            title(app.PSDAxes, 'Güç Spektral Yoğunluğu (PSD)');
+            xlabel(app.PSDAxes, 'Frekans (Hz)');
+            ylabel(app.PSDAxes, 'PSD (mV²/Hz)');
+            grid(app.PSDAxes, 'on');
+
+            % ===================================================================
+            %  TAB 2: SENTETİK TEST & ANALİZ
+            % ===================================================================
+            app.SentetikTab = uitab(app.TabGroup, ...
+                'Title', '  Sentetik Test & Analiz  ');
+
+            % Sol panel
+            app.LeftPanel_ST = uipanel(app.SentetikTab, ...
+                'Title', 'Sentetik EMG Üretici', ...
+                'Position', [5 5 280 665], ...
+                'FontWeight', 'bold', 'FontSize', 11);
+
+            uilabel(app.LeftPanel_ST, 'Text', 'SİNYAL PARAMETRELERİ', ...
+                'Position', [5 625 260 20], 'FontWeight', 'bold', ...
+                'FontColor', [0.3 0.3 0.6]);
+
+            % Süre
+            uilabel(app.LeftPanel_ST, 'Text', 'Süre (s):', ...
+                'Position', [5 598 80 20]);
+            app.SuresiEditField = uieditfield(app.LeftPanel_ST, 'numeric', ...
+                'Value', 3, 'Limits', [0.5 30], ...
+                'Position', [225 598 50 22], ...
+                'ValueChangedFcn', createCallbackFcn(app, @SuresiEditFieldValueChanged, true));
+            app.SuresiSlider = uislider(app.LeftPanel_ST, ...
+                'Limits', [0.5 30], 'Value', 3, ...
+                'Position', [5 592 265 3], ...
+                'ValueChangedFcn', createCallbackFcn(app, @SuresiSliderValueChanged, true));
+
+            % Örnekleme Frekansı
+            uilabel(app.LeftPanel_ST, 'Text', 'Örnekleme Fs (Hz):', ...
+                'Position', [5 562 155 20]);
+            app.OrnFsEditField = uieditfield(app.LeftPanel_ST, 'numeric', ...
+                'Value', 2000, 'Limits', [500 20000], ...
+                'Position', [165 562 110 24]);
+
+            % Gürültü Seviyesi
+            uilabel(app.LeftPanel_ST, 'Text', 'Gürültü Seviyesi (%):', ...
+                'Position', [5 535 160 20]);
+            app.GurultuEditField = uieditfield(app.LeftPanel_ST, 'numeric', ...
+                'Value', 30, 'Limits', [0 200], ...
+                'Position', [225 535 50 22], ...
+                'ValueChangedFcn', createCallbackFcn(app, @GurultuEditFieldValueChanged, true));
+            app.GurultuSlider = uislider(app.LeftPanel_ST, ...
+                'Limits', [0 200], 'Value', 30, ...
+                'Position', [5 529 265 3], ...
+                'ValueChangedFcn', createCallbackFcn(app, @GurultuSliderValueChanged, true));
+
+            uilabel(app.LeftPanel_ST, 'Text', 'GÜRÜLTÜ BİLEŞENLERİ', ...
+                'Position', [5 500 260 20], 'FontWeight', 'bold', ...
+                'FontColor', [0.3 0.3 0.6]);
+
+            % 50 Hz şebeke gürültüsü
+            app.Seb50HzCheck = uicheckbox(app.LeftPanel_ST, ...
+                'Text', '50 Hz Şebeke Gürültüsü', ...
+                'Value', true, 'Position', [5 476 240 22]);
+
+            % Baseline wander
+            app.BaselineCheck = uicheckbox(app.LeftPanel_ST, ...
+                'Text', 'Baseline Wander (Düşük Frekans)', ...
+                'Value', true, 'Position', [5 452 260 22]);
+
+            % Oluştur butonu
+            app.SentetikOlusturButton = uibutton(app.LeftPanel_ST, 'push', ...
+                'Text', '  Sentetik EMG Oluştur', ...
+                'Position', [5 415 265 35], ...
+                'FontSize', 12, 'FontWeight', 'bold', ...
+                'BackgroundColor', [0.2 0.4 0.8], 'FontColor', 'white', ...
+                'ButtonPushedFcn', createCallbackFcn(app, @SentetikOlusturButtonPushed, true));
+
+            % Filtre seçimi - sentetik için
+            uilabel(app.LeftPanel_ST, 'Text', 'FİLTRE UYGULA', ...
+                'Position', [5 378 260 20], 'FontWeight', 'bold', ...
+                'FontColor', [0.3 0.3 0.6]);
+
+            app.SenFiltreTipiDD = uidropdown(app.LeftPanel_ST, ...
+                'Items', {'Butterworth (Bandpass)', 'Notch (50 Hz)', ...
+                          'Wavelet (db4)', 'Tam Zincir (BP + Notch)'}, ...
+                'Position', [5 350 265 26]);
+
+            app.SenFiltreUygButton = uibutton(app.LeftPanel_ST, 'push', ...
+                'Text', '  Filtreyi Uygula', ...
+                'Position', [5 315 265 30], ...
+                'FontSize', 11, 'FontWeight', 'bold', ...
+                'BackgroundColor', [0.1 0.6 0.2], 'FontColor', 'white', ...
+                'ButtonPushedFcn', createCallbackFcn(app, @SenFiltreUygButtonPushed, true));
+
+            % Sentetik metrik paneli
+            app.SenMetrikPanel = uipanel(app.LeftPanel_ST, ...
+                'Title', 'Sentetik Sinyal Metrikleri', ...
+                'Position', [3 5 270 295], ...
+                'FontSize', 10, 'FontWeight', 'bold');
+
+            sen_labels = {'SNR (referansa göre dB):', 'RMS (mV):', 'Median Freq (Hz):'};
+            sen_props  = {'SenSNRDegLabel', 'SenRMSDegLabel', 'SenMFDegLabel'};
+            for mi = 1:3
+                y_pos = 265 - (mi-1)*50;
+                uilabel(app.SenMetrikPanel, 'Text', sen_labels{mi}, ...
+                    'Position', [5 y_pos 220 20], 'FontSize', 9, ...
+                    'FontWeight', 'bold');
+                app.(sen_props{mi}) = uilabel(app.SenMetrikPanel, ...
+                    'Text', '-', ...
+                    'Position', [5 y_pos-22 260 20], 'FontSize', 11, ...
+                    'FontColor', [0.8 0.3 0.1], 'FontWeight', 'bold');
+            end
+
+            uilabel(app.SenMetrikPanel, 'Text', ...
+                'SNR, temiz referans sinyal üzerinden hesaplanır.', ...
+                'Position', [5 10 260 30], 'FontSize', 8, ...
+                'FontColor', [0.5 0.5 0.5], 'WordWrap', 'on');
+
+            % Sağ grafik paneli - sentetik
+            app.RightPanel_ST = uipanel(app.SentetikTab, ...
+                'Title', '', 'BorderType', 'none', ...
+                'Position', [292 5 960 665]);
+
+            app.SenHamAxes = uiaxes(app.RightPanel_ST, ...
+                'Position', [5 445 950 210]);
+            title(app.SenHamAxes, 'Sentetik Ham EMG (Gürültülü)');
+            xlabel(app.SenHamAxes, 'Zaman (s)');
+            ylabel(app.SenHamAxes, 'Genlik (mV)');
+            grid(app.SenHamAxes, 'on');
+
+            app.SenFiltAxes = uiaxes(app.RightPanel_ST, ...
+                'Position', [5 225 950 210]);
+            title(app.SenFiltAxes, 'Filtrelenmiş Sinyal');
+            xlabel(app.SenFiltAxes, 'Zaman (s)');
+            ylabel(app.SenFiltAxes, 'Genlik (mV)');
+            grid(app.SenFiltAxes, 'on');
+
+            app.SenPSDAxes = uiaxes(app.RightPanel_ST, ...
+                'Position', [5 5 950 210]);
+            title(app.SenPSDAxes, 'Güç Spektral Yoğunluğu');
+            xlabel(app.SenPSDAxes, 'Frekans (Hz)');
+            ylabel(app.SenPSDAxes, 'PSD');
+            grid(app.SenPSDAxes, 'on');
+
+            % Figürü görünür yap
+            app.UIFigure.Visible = 'on';
+
+        end  % createComponents
+
+    end  % component init methods
+
+    % =========================================================================
+    %  APP BAŞLATMA ve KAPATMA
+    % =========================================================================
+    methods (Access = public)
+
+        function app = DelsysNoiseMaster
+            % Bileşenleri oluştur
+            createComponents(app);
+            % App Designer register
+            registerApp(app, app.UIFigure);
+            % İlk durum
+            guncelleFiltreKontrolleri(app);
+            if nargout == 0
+                clear app;
+            end
+        end
+
+        function delete(app)
+            delete(app.UIFigure);
+        end
+
+    end
+
+end  % classdef
+
+
+% =========================================================================
+%  YEREL YARDIMCI FONKSİYON: compute_median_freq
+%  (Dosyanın sonuna eklenir, ayrı dosyaya gerek yok)
+% =========================================================================
+function mf = compute_median_freq(signal, fs)
+    % Medyan frekans: güç spektrumunun yarısının bulunduğu frekans
+    n   = length(signal);
+    win = min(round(n/4), 1024);
+    [pxx, f] = pwelch(signal, win, [], [], fs);
+    cumulative = cumsum(pxx);
+    half_total = cumulative(end) / 2;
+    idx = find(cumulative >= half_total, 1, 'first');
+    if isempty(idx)
+        mf = 0;
+    else
+        mf = f(idx);
+    end
+end

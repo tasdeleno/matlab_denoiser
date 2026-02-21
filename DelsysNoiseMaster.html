@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delsys Noise Master</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg:      #060a12;
+  --surface: #0c1220;
+  --panel:   #101828;
+  --card:    #162030;
+  --card2:   #1e2d42;
+  --border:  rgba(74,158,255,0.15);
+  --border2: rgba(74,158,255,0.35);
+  --blue:    #5aabff;
+  --blue-dim:#2a5a9a;
+  --orange:  #ff7a5c;
+  --green:   #3dffa0;
+  --yellow:  #ffd060;
+  --purple:  #a78bfa;
+  --red:     #ff5566;
+  --text:    #d0e0f5;
+  --text-mid:#8099bb;
+  --text-dim:#4a607a;
+  --bright:  #edf4ff;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Inter', sans-serif;
+  --r: 10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 15px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(74,158,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74,158,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none; z-index: 0;
+}
+
+body::after {
+  content: '';
+  position: fixed; top: -300px; left: 50%;
+  transform: translateX(-50%);
+  width: 900px; height: 600px;
+  background: radial-gradient(ellipse, rgba(90,171,255,0.05) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+.app-wrapper {
+  position: relative; z-index: 1;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}
+
+/* ── HEADER ── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.logo { display: flex; align-items: center; gap: 14px; }
+
+.logo-icon {
+  width: 44px; height: 44px;
+  background: linear-gradient(140deg,#1a3a70,#0c1e40);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 24px rgba(90,171,255,0.2), 0 0 48px rgba(90,171,255,0.08);
+  flex-shrink: 0;
+}
+.logo-icon svg { width: 24px; height: 24px; }
+
+.logo-text h1 {
+  font-size: 1.15rem; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--bright);
+}
+.logo-text p {
+  font-family: var(--mono); font-size: 0.68rem; color: var(--blue);
+  letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px;
+}
+
+.header-right { display: flex; gap: 10px; align-items: center; }
+.badge {
+  font-family: var(--mono); font-size: 0.62rem; padding: 4px 11px;
+  border-radius: 20px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.badge-blue  { background: rgba(90,171,255,0.1); color: var(--blue);  border: 1px solid rgba(90,171,255,0.28); }
+.badge-green { background: rgba(61,255,160,0.08); color: var(--green); border: 1px solid rgba(61,255,160,0.22); }
+
+/* ── TAB NAV ── */
+.tab-nav {
+  display: flex; gap: 3px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px; padding: 5px;
+  width: fit-content; margin-bottom: 22px;
+}
+.tab-btn {
+  font-family: var(--sans); font-size: 0.88rem; font-weight: 600;
+  padding: 9px 24px; border: 1px solid transparent;
+  border-radius: 8px; cursor: pointer;
+  transition: all 0.2s; background: transparent; color: var(--text-dim);
+}
+.tab-btn.active {
+  background: linear-gradient(135deg,rgba(90,171,255,0.18),rgba(90,171,255,0.06));
+  color: var(--blue); border-color: rgba(90,171,255,0.32);
+  box-shadow: 0 0 18px rgba(90,171,255,0.15);
+}
+.tab-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.04); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── LAYOUT ── */
+.layout {
+  display: grid;
+  grid-template-columns: 310px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+/* ── SIDEBAR ── */
+.sidebar { display: flex; flex-direction: column; gap: 12px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px 18px 16px;
+  position: relative; overflow: hidden;
+}
+.panel::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg,transparent,rgba(90,171,255,0.35),transparent);
+}
+
+.panel-title {
+  font-family: var(--mono); font-size: 0.65rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--blue);
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-title::before {
+  content: ''; width: 3px; height: 13px;
+  background: var(--blue); border-radius: 2px;
+  box-shadow: 0 0 8px rgba(90,171,255,0.7);
+}
+
+/* ── FORM ── */
+.form-group { margin-bottom: 14px; }
+
+.form-label {
+  font-family: var(--mono); font-size: 0.72rem; color: var(--text-mid);
+  letter-spacing: 0.05em;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.form-label .val {
+  color: var(--bright); font-weight: 700; font-size: 0.82rem;
+  background: rgba(90,171,255,0.1); padding: 1px 8px; border-radius: 5px;
+  border: 1px solid rgba(90,171,255,0.2);
+}
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 5px; border-radius: 3px;
+  background: var(--card2); outline: none; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--blue); border: 2px solid var(--bg);
+  box-shadow: 0 0 10px rgba(90,171,255,0.65); cursor: pointer;
+  transition: transform 0.15s;
+}
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+input[type="range"].orange::-webkit-slider-thumb { background: var(--orange); box-shadow: 0 0 10px rgba(255,122,92,0.65); }
+input[type="range"].green-r::-webkit-slider-thumb  { background: var(--green);  box-shadow: 0 0 10px rgba(61,255,160,0.65); }
+
+select, input[type="number"] {
+  width: 100%; background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text);
+  font-family: var(--mono); font-size: 0.8rem;
+  padding: 9px 12px; outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+select:focus, input[type="number"]:focus {
+  border-color: var(--blue); box-shadow: 0 0 0 3px rgba(90,171,255,0.1);
+}
+select option { background: var(--card); }
+
+.checkbox-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px; cursor: pointer;
+}
+.checkbox-row input[type="checkbox"] {
+  width: 17px; height: 17px;
+  accent-color: var(--blue); cursor: pointer; flex-shrink: 0;
+}
+.checkbox-row label {
+  font-size: 0.83rem; color: var(--text); cursor: pointer; line-height: 1.4;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: var(--sans); font-size: 0.82rem; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  border: none; border-radius: 8px; padding: 12px 18px;
+  cursor: pointer; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; width: 100%; position: relative; overflow: hidden;
+}
+.btn::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(rgba(255,255,255,0.07), transparent);
+  opacity: 0; transition: opacity 0.2s;
+}
+.btn:hover::after { opacity: 1; }
+.btn:active { transform: scale(0.98); }
+
+.btn-primary {
+  background: linear-gradient(135deg, #1c4d9e, #0f2d68);
+  color: var(--blue); border: 1px solid rgba(90,171,255,0.38);
+  box-shadow: 0 0 18px rgba(90,171,255,0.18);
+}
+.btn-primary:hover { box-shadow: 0 0 28px rgba(90,171,255,0.32); }
+
+.btn-success {
+  background: linear-gradient(135deg, #0a3d28, #062a1c);
+  color: var(--green); border: 1px solid rgba(61,255,160,0.28);
+  box-shadow: 0 0 14px rgba(61,255,160,0.12);
+}
+.btn-success:hover { box-shadow: 0 0 26px rgba(61,255,160,0.26); }
+
+.btn-secondary {
+  background: var(--card); color: var(--text-mid); border: 1px solid var(--border);
+}
+.btn-secondary:hover { color: var(--text); border-color: var(--border2); }
+
+.btn-row { display: flex; gap: 8px; }
+.btn-row .btn { flex: 1; }
+.btn-sm { padding: 9px 14px; font-size: 0.76rem; }
+
+/* ── DROP ZONE ── */
+.drop-zone {
+  border: 2px dashed rgba(90,171,255,0.22);
+  border-radius: var(--r); padding: 22px 16px; text-align: center;
+  cursor: pointer; transition: all 0.2s; margin-bottom: 12px;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--blue); background: rgba(90,171,255,0.05);
+  box-shadow: 0 0 20px rgba(90,171,255,0.15);
+}
+.drop-zone svg { width: 28px; height: 28px; color: var(--text-dim); margin-bottom: 8px; }
+.drop-zone.drag-over svg { color: var(--blue); }
+.drop-zone p {
+  font-size: 0.82rem; color: var(--text-mid); line-height: 1.7;
+}
+.drop-zone p strong { color: var(--blue); }
+
+.file-info {
+  font-family: var(--mono); font-size: 0.72rem; color: var(--green);
+  background: rgba(61,255,160,0.06); border: 1px solid rgba(61,255,160,0.18);
+  border-radius: 7px; padding: 9px 12px; margin-bottom: 12px;
+  display: none; word-break: break-all; line-height: 1.6;
+}
+
+/* ── FILTER TABS ── */
+.filter-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+.filter-tab {
+  flex: 1; font-family: var(--mono); font-size: 0.66rem;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 8px 6px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--card);
+  color: var(--text-dim); cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.filter-tab.active {
+  background: rgba(90,171,255,0.12); color: var(--blue);
+  border-color: rgba(90,171,255,0.38);
+  box-shadow: 0 0 10px rgba(90,171,255,0.1);
+}
+
+.filter-section { display: none; }
+.filter-section.active { display: block; }
+
+/* ── METRICS ── */
+.metrics-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px; margin-bottom: 18px;
+}
+.metric-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 15px 14px;
+  position: relative; overflow: hidden;
+}
+.metric-card::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+}
+.metric-card.snr::after { background: linear-gradient(90deg, var(--yellow), transparent); }
+.metric-card.rms::after { background: linear-gradient(90deg, var(--blue),   transparent); }
+.metric-card.mf::after  { background: linear-gradient(90deg, var(--orange),  transparent); }
+
+.metric-label {
+  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-mid); margin-bottom: 7px;
+}
+.metric-desc {
+  font-size: 0.68rem; color: var(--text-dim); margin-bottom: 6px; line-height: 1.4;
+}
+.metric-value {
+  font-family: var(--mono); font-size: 1.55rem; font-weight: 700;
+  line-height: 1; transition: all 0.35s;
+}
+.metric-value.snr-val { color: var(--yellow); text-shadow: 0 0 14px rgba(255,208,96,0.35); }
+.metric-value.rms-val { color: var(--blue);   text-shadow: 0 0 14px rgba(90,171,255,0.35); }
+.metric-value.mf-val  { color: var(--orange);  text-shadow: 0 0 14px rgba(255,122,92,0.35); }
+
+.metric-unit {
+  font-family: var(--mono); font-size: 0.62rem; color: var(--text-dim);
+  margin-top: 4px; letter-spacing: 0.06em;
+}
+
+/* ── CHARTS ── */
+.charts-area { display: flex; flex-direction: column; gap: 14px; }
+
+.chart-container {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px; position: relative;
+}
+.chart-container::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(90,171,255,0.28), transparent);
+}
+
+.chart-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.chart-title {
+  font-size: 0.82rem; font-weight: 600; color: var(--text); letter-spacing: 0.01em;
+}
+.chart-subtitle {
+  font-family: var(--mono); font-size: 0.64rem; color: var(--text-dim); margin-top: 1px;
+}
+
+.chart-legend {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+}
+.legend-item {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 0.75rem; color: var(--text-mid);
+}
+.legend-line {
+  width: 18px; height: 3px; border-radius: 2px; flex-shrink: 0;
+}
+
+canvas {
+  display: block; width: 100%; border-radius: 6px;
+  background: #07090f; cursor: crosshair;
+}
+.signal-canvas { height: 230px; }
+.psd-canvas    { height: 170px; }
+
+.canvas-tooltip {
+  position: absolute; background: rgba(8,12,22,0.95);
+  border: 1px solid var(--border2); border-radius: 7px;
+  padding: 8px 12px; font-family: var(--mono); font-size: 0.72rem;
+  color: var(--text); pointer-events: none; display: none;
+  z-index: 100; white-space: nowrap; backdrop-filter: blur(10px);
+  line-height: 1.8;
+}
+.canvas-hint {
+  font-family: var(--mono); font-size: 0.62rem; color: var(--text-dim);
+  text-align: right; margin-top: 6px;
+}
+
+/* ── STATUS BAR ── */
+.status-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px;
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-dim); flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-dot.active {
+  background: var(--green); box-shadow: 0 0 7px var(--green);
+  animation: pulse 2.2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+.status-text { font-family: var(--mono); font-size: 0.72rem; color: var(--text-mid); }
+
+/* ── SPINNER ── */
+.spinner-overlay {
+  position: absolute; inset: 0; background: rgba(6,10,18,0.75);
+  border-radius: var(--r); display: none;
+  align-items: center; justify-content: center;
+  z-index: 50; backdrop-filter: blur(4px);
+}
+.spinner {
+  width: 38px; height: 38px;
+  border: 3px solid var(--border); border-top-color: var(--blue);
+  border-radius: 50%; animation: spin 0.72s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── TOAST ── */
+#toast-container {
+  position: fixed; top: 22px; right: 22px;
+  z-index: 1000; display: flex; flex-direction: column; gap: 9px;
+}
+.toast {
+  font-family: var(--mono); font-size: 0.74rem;
+  padding: 12px 18px; border-radius: 9px; letter-spacing: 0.03em;
+  animation: toastIn 0.28s ease, toastOut 0.28s ease 2.72s forwards;
+  max-width: 360px; display: flex; align-items: center; gap: 10px;
+  backdrop-filter: blur(14px);
+}
+.toast-success { background: rgba(61,255,160,0.1);  border: 1px solid rgba(61,255,160,0.3);  color: var(--green); }
+.toast-error   { background: rgba(255,85,102,0.1);  border: 1px solid rgba(255,85,102,0.3);  color: var(--red);   }
+.toast-info    { background: rgba(90,171,255,0.1);  border: 1px solid rgba(90,171,255,0.3);  color: var(--blue);  }
+@keyframes toastIn  { from{transform:translateX(115%);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes toastOut { from{transform:translateX(0);opacity:1} to{transform:translateX(115%);opacity:0} }
+
+/* ══════════════════════════════════════════
+   LOG PANEL
+══════════════════════════════════════════ */
+.log-panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--r); overflow: hidden;
+}
+
+.log-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; user-select: none;
+}
+.log-header-left {
+  display: flex; align-items: center; gap: 10px;
+}
+.log-header-title {
+  font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--blue);
+}
+.log-count {
+  font-family: var(--mono); font-size: 0.62rem;
+  background: rgba(90,171,255,0.12); color: var(--blue);
+  border: 1px solid rgba(90,171,255,0.25); border-radius: 12px;
+  padding: 2px 9px; min-width: 26px; text-align: center;
+}
+.log-toggle {
+  font-family: var(--mono); font-size: 0.68rem; color: var(--text-dim);
+  transition: transform 0.25s;
+}
+.log-toggle.open { transform: rotate(180deg); }
+
+.log-body {
+  max-height: 300px; overflow-y: auto;
+  padding: 8px 0;
+  font-family: var(--mono); font-size: 0.73rem;
+}
+
+.log-entry {
+  display: flex; gap: 0; align-items: flex-start;
+  padding: 5px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background 0.15s;
+  animation: logEntryIn 0.22s ease;
+}
+.log-entry:hover { background: rgba(90,171,255,0.04); }
+.log-entry:last-child { border-bottom: none; }
+
+@keyframes logEntryIn {
+  from { opacity:0; transform: translateY(-4px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+.log-time {
+  color: var(--text-dim); flex-shrink: 0; width: 68px; padding-top: 1px;
+  font-size: 0.66rem; letter-spacing: 0.02em;
+}
+.log-icon { flex-shrink: 0; width: 20px; text-align: center; margin-right: 6px; font-size: 0.8rem; }
+.log-msg  { color: var(--text); line-height: 1.55; }
+
+.log-entry.info   .log-icon { color: var(--blue);  }
+.log-entry.success .log-icon { color: var(--green); }
+.log-entry.warn   .log-icon { color: var(--yellow); }
+.log-entry.error  .log-icon { color: var(--red);    }
+.log-entry.step   .log-icon { color: var(--purple); }
+
+.log-entry.info    .log-msg { color: var(--text-mid); }
+.log-entry.success .log-msg { color: var(--text); }
+.log-entry.warn    .log-msg { color: var(--yellow); }
+.log-entry.error   .log-msg { color: var(--red); }
+.log-entry.step    .log-msg { color: var(--text); }
+
+/* highlight values inside log messages */
+.log-val {
+  color: var(--bright); background: rgba(255,255,255,0.07);
+  padding: 0 5px; border-radius: 4px; font-weight: 500;
+}
+.log-val.blue   { color: var(--blue);   background: rgba(90,171,255,0.1); }
+.log-val.green  { color: var(--green);  background: rgba(61,255,160,0.08); }
+.log-val.orange { color: var(--orange); background: rgba(255,122,92,0.1); }
+.log-val.yellow { color: var(--yellow); background: rgba(255,208,96,0.1); }
+
+.log-clear-btn {
+  font-family: var(--mono); font-size: 0.62rem; color: var(--text-dim);
+  background: none; border: 1px solid var(--border);
+  border-radius: 5px; padding: 2px 8px; cursor: pointer;
+  transition: all 0.2s; letter-spacing: 0.06em;
+}
+.log-clear-btn:hover { color: var(--red); border-color: rgba(255,85,102,0.4); }
+
+.log-empty {
+  padding: 20px 16px; color: var(--text-dim);
+  font-size: 0.72rem; text-align: center; letter-spacing: 0.06em;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: var(--card2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(90,171,255,0.28); }
+
+/* ══════════════════════════════════════════
+   JİROSKOP SEKMESİ ÖZEL STİLLER
+══════════════════════════════════════════ */
+.gyro-canvas { height: 200px; }
+
+.gyro-info-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text-mid);
+  line-height: 1.9;
+  margin-bottom: 12px;
+}
+.gyro-info-box .key { color: var(--text-dim); }
+.gyro-info-box .val-g { color: var(--green); font-weight: 500; }
+
+.algo-steps {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px;
+}
+.algo-step {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 7px; padding: 9px 12px;
+  font-size: 0.78rem; color: var(--text-mid); line-height: 1.5;
+}
+.algo-step-num {
+  font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
+  color: var(--bg); background: var(--blue);
+  border-radius: 50%; width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+
+.gyro-metrics {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin-bottom: 18px;
+}
+.gyro-metric-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 13px 14px;
+  position: relative; overflow: hidden;
+}
+.gyro-metric-card.ang::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--purple), transparent);
+}
+.gyro-metric-card.drift::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--yellow), transparent);
+}
+.gyro-metric-val {
+  font-family: var(--mono); font-size: 1.35rem; font-weight: 700;
+  line-height: 1; transition: all 0.35s;
+}
+.gyro-metric-val.ang-val  { color: var(--purple); text-shadow: 0 0 14px rgba(167,139,250,0.35); }
+.gyro-metric-val.drift-val { color: var(--yellow); text-shadow: 0 0 14px rgba(255,208,96,0.35); }
+</style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<div class="app-wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#5aabff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12 Q4 5 6 12 Q8 19 10 12 Q12 5 14 12 Q16 19 18 12 Q20 5 22 12"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <h1>Delsys Noise Master</h1>
+        <p>EMG Signal Processing &amp; Denoising</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="badge badge-blue">v1.1</span>
+      <span class="badge badge-green">Web Edition</span>
+    </div>
+  </header>
+
+  <!-- TAB NAV -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('process')">Veri İşleme</button>
+    <button class="tab-btn" onclick="switchTab('synthetic')">Sentetik Test &amp; Analiz</button>
+    <button class="tab-btn" onclick="switchTab('gyro')">Jiroskop Analizi</button>
+  </div>
+
+  <!-- ════════════════════ TAB 1 ════════════════════ -->
+  <div id="tab-process" class="tab-panel active">
+    <div class="layout">
+      <div class="sidebar">
+
+        <div class="panel">
+          <div class="panel-title">Veri Kaynağı</div>
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <p>Sürükle &amp; bırak ya da <strong>tıklayarak seç</strong><br>CSV formatı desteklenir</p>
+          </div>
+          <div class="file-info" id="file-info"></div>
+          <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleFileInput(this)">
+          <div class="form-group" style="margin-bottom:0">
+            <div class="form-label">
+              Örnekleme Frekansı
+              <span class="val"><span id="fs-display">2000</span> Hz</span>
+            </div>
+            <input type="number" id="fs-input" value="2000" min="100" max="10000" step="100"
+              oninput="document.getElementById('fs-display').textContent=this.value">
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Filtre Ayarları</div>
+          <div class="filter-tabs">
+            <div class="filter-tab active" onclick="switchFilter(this,'bw','p')">Butterworth</div>
+            <div class="filter-tab" onclick="switchFilter(this,'notch','p')">Notch</div>
+            <div class="filter-tab" onclick="switchFilter(this,'ma','p')">Ort. Alma</div>
+          </div>
+
+          <div id="p-bw" class="filter-section active">
+            <div class="form-group">
+              <div class="form-label">Alt Kesme<span class="val"><span id="p-low-val">20</span> Hz</span></div>
+              <input type="range" id="p-low" min="1" max="200" value="20" oninput="document.getElementById('p-low-val').textContent=this.value">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Üst Kesme<span class="val"><span id="p-high-val">450</span> Hz</span></div>
+              <input type="range" class="orange" id="p-high" min="100" max="1000" value="450" oninput="document.getElementById('p-high-val').textContent=this.value">
+            </div>
+          </div>
+
+          <div id="p-notch" class="filter-section">
+            <div class="form-group">
+              <div class="form-label">Notch Frekansı</div>
+              <select id="p-notch-freq">
+                <option value="50">50 Hz — Avrupa şebekesi</option>
+                <option value="60">60 Hz — Amerika şebekesi</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Q Faktörü<span class="val"><span id="p-q-val">35</span></span></div>
+              <input type="range" class="green-r" id="p-q" min="5" max="100" value="35" oninput="document.getElementById('p-q-val').textContent=this.value">
+            </div>
+          </div>
+
+          <div id="p-ma" class="filter-section">
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Pencere Boyutu<span class="val"><span id="p-win-val">10</span></span></div>
+              <input type="range" id="p-win" min="2" max="100" value="10" oninput="document.getElementById('p-win-val').textContent=this.value">
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="margin-top:14px" onclick="applyFilter('process')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Filtreyi Uygula
+          </button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Dışa Aktar</div>
+          <div class="btn-row">
+            <button class="btn btn-success btn-sm" onclick="exportCSV()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              CSV
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="exportJSON()">JSON</button>
+          </div>
+        </div>
+
+      </div><!-- /sidebar -->
+
+      <div>
+        <div class="status-bar">
+          <div class="status-dot" id="p-status-dot"></div>
+          <span class="status-text" id="p-status-text">Dosya bekleniyor…</span>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card snr">
+            <div class="metric-label">SNR</div>
+            <div class="metric-desc">Sinyal / Gürültü Oranı</div>
+            <div class="metric-value snr-val" id="p-snr">—</div>
+            <div class="metric-unit">dB (decibel)</div>
+          </div>
+          <div class="metric-card rms">
+            <div class="metric-label">RMS</div>
+            <div class="metric-desc">Ortalama Karekök Genlik</div>
+            <div class="metric-value rms-val" id="p-rms">—</div>
+            <div class="metric-unit">genlik birimi</div>
+          </div>
+          <div class="metric-card mf">
+            <div class="metric-label">Median Frekans</div>
+            <div class="metric-desc">Spektral güç ortası</div>
+            <div class="metric-value mf-val" id="p-mf">—</div>
+            <div class="metric-unit">Hz (hertz)</div>
+          </div>
+        </div>
+
+        <div class="charts-area">
+          <div class="chart-container" style="position:relative">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Sinyal Görünümü — Zaman Alanı</div>
+                <div class="chart-subtitle">Ham ve filtrelenmiş sinyal üst üste</div>
+              </div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-line" style="background:#5aabff"></div>Ham Sinyal</div>
+                <div class="legend-item"><div class="legend-line" style="background:#ff7a5c"></div>Filtrelenmiş</div>
+              </div>
+            </div>
+            <canvas id="p-signal-canvas" class="signal-canvas"></canvas>
+            <div class="canvas-tooltip" id="p-tooltip"></div>
+            <div class="canvas-hint">🖱 Kaydır: zoom &nbsp;|&nbsp; Sürükle: kaydır</div>
+            <div class="spinner-overlay" id="p-spinner"><div class="spinner"></div></div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Güç Spektral Yoğunluğu (PSD)</div>
+                <div class="chart-subtitle">Welch yöntemi — Hanning penceresi — logaritmik Y ekseni</div>
+              </div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-line" style="background:#5aabff"></div>Ham</div>
+                <div class="legend-item"><div class="legend-line" style="background:#ff7a5c"></div>Filtrelenmiş</div>
+              </div>
+            </div>
+            <canvas id="p-psd-canvas" class="psd-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-process -->
+
+  <!-- ════════════════════ TAB 2 ════════════════════ -->
+  <div id="tab-synthetic" class="tab-panel">
+    <div class="layout">
+      <div class="sidebar">
+
+        <div class="panel">
+          <div class="panel-title">Sinyal Parametreleri</div>
+
+          <div class="form-group">
+            <div class="form-label">Süre<span class="val"><span id="dur-val">3</span> s</span></div>
+            <input type="range" id="syn-dur" min="0.5" max="10" step="0.5" value="3"
+              oninput="document.getElementById('dur-val').textContent=this.value">
+          </div>
+
+          <div class="form-group">
+            <div class="form-label">Örnekleme Frekansı<span class="val"><span id="syn-fs-val">2000</span> Hz</span></div>
+            <input type="number" id="syn-fs" value="2000" min="500" max="5000" step="100"
+              oninput="document.getElementById('syn-fs-val').textContent=this.value">
+          </div>
+
+          <div class="form-group">
+            <div class="form-label">Gürültü Seviyesi<span class="val"><span id="noise-val">40</span>%</span></div>
+            <input type="range" class="orange" id="syn-noise" min="0" max="200" value="40"
+              oninput="document.getElementById('noise-val').textContent=this.value">
+          </div>
+
+          <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;margin-bottom:12px">
+            <div style="font-family:var(--mono);font-size:0.64rem;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px">Gürültü Bileşenleri</div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="add-50hz" checked>
+              <label for="add-50hz">50 Hz Şebeke Gürültüsü</label>
+            </div>
+            <div class="checkbox-row" style="margin-bottom:0">
+              <input type="checkbox" id="add-baseline" checked>
+              <label for="add-baseline">Baseline Wander (0.3–1.5 Hz kayma)</label>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" onclick="generateSynthetic()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+            Sinyal Oluştur
+          </button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Filtre Uygula</div>
+
+          <div class="filter-tabs">
+            <div class="filter-tab active" onclick="switchFilter(this,'bw','s')">BW</div>
+            <div class="filter-tab" onclick="switchFilter(this,'notch','s')">Notch</div>
+            <div class="filter-tab" onclick="switchFilter(this,'ma','s')">MA</div>
+            <div class="filter-tab" onclick="switchFilter(this,'chain','s')">Zincir</div>
+          </div>
+
+          <div id="s-bw" class="filter-section active">
+            <div class="form-group">
+              <div class="form-label">Alt Kesme<span class="val"><span id="s-low-val">20</span> Hz</span></div>
+              <input type="range" id="s-low" min="1" max="200" value="20" oninput="document.getElementById('s-low-val').textContent=this.value">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Üst Kesme<span class="val"><span id="s-high-val">450</span> Hz</span></div>
+              <input type="range" class="orange" id="s-high" min="100" max="1000" value="450" oninput="document.getElementById('s-high-val').textContent=this.value">
+            </div>
+          </div>
+
+          <div id="s-notch" class="filter-section">
+            <div class="form-group">
+              <div class="form-label">Notch Freq</div>
+              <select id="s-notch-freq">
+                <option value="50">50 Hz (Avrupa)</option>
+                <option value="60">60 Hz (Amerika)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Q<span class="val"><span id="s-q-val">35</span></span></div>
+              <input type="range" class="green-r" id="s-q" min="5" max="100" value="35" oninput="document.getElementById('s-q-val').textContent=this.value">
+            </div>
+          </div>
+
+          <div id="s-ma" class="filter-section">
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Pencere<span class="val"><span id="s-win-val">10</span></span></div>
+              <input type="range" id="s-win" min="2" max="100" value="10" oninput="document.getElementById('s-win-val').textContent=this.value">
+            </div>
+          </div>
+
+          <div id="s-chain" class="filter-section">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:var(--mono);font-size:0.72rem;color:var(--text-mid);line-height:1.9">
+              <div>① Butterworth BP <span style="color:var(--blue)">20 – 450 Hz</span></div>
+              <div>② Notch <span style="color:var(--orange)">50 Hz</span> &nbsp;Q = 35</div>
+              <div style="color:var(--text-dim);font-size:0.65rem;margin-top:4px">İki filtre sırayla uygulanır</div>
+            </div>
+          </div>
+
+          <button class="btn btn-success" style="margin-top:12px" onclick="applyFilter('synthetic')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Filtreyi Uygula
+          </button>
+        </div>
+
+        <!-- Referans SNR kartı -->
+        <div class="panel">
+          <div class="panel-title">Referans SNR</div>
+          <p style="font-size:0.78rem;color:var(--text-mid);line-height:1.6;margin-bottom:12px">
+            Filtrelenmiş sinyal, gürültüsüz <strong>temiz referans</strong> ile karşılaştırılarak SNR hesaplanır. Filtrenin ne kadar etkili olduğunu gösterir.
+          </p>
+          <div class="metric-card snr" style="margin-bottom:0">
+            <div class="metric-label">SNR — Referansa Göre</div>
+            <div class="metric-value snr-val" id="s-ref-snr">—</div>
+            <div class="metric-unit">dB · filtreden sonra</div>
+          </div>
+        </div>
+
+      </div><!-- /sidebar -->
+
+      <div>
+        <div class="status-bar">
+          <div class="status-dot" id="s-status-dot"></div>
+          <span class="status-text" id="s-status-text">Sinyal bekleniyor…</span>
+        </div>
+
+        <!-- Metrics -->
+        <div class="metrics-grid">
+          <div class="metric-card snr">
+            <div class="metric-label">SNR</div>
+            <div class="metric-desc">Sinyal / Gürültü Oranı</div>
+            <div class="metric-value snr-val" id="s-snr">—</div>
+            <div class="metric-unit">dB (decibel)</div>
+          </div>
+          <div class="metric-card rms">
+            <div class="metric-label">RMS</div>
+            <div class="metric-desc">Ortalama Karekök Genlik</div>
+            <div class="metric-value rms-val" id="s-rms">—</div>
+            <div class="metric-unit">genlik birimi</div>
+          </div>
+          <div class="metric-card mf">
+            <div class="metric-label">Median Frekans</div>
+            <div class="metric-desc">Spektral güç ortası</div>
+            <div class="metric-value mf-val" id="s-mf">—</div>
+            <div class="metric-unit">Hz (hertz)</div>
+          </div>
+        </div>
+
+        <!-- Grafik -->
+        <div class="charts-area">
+          <div class="chart-container" style="position:relative">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Sentetik EMG — Zaman Alanı</div>
+                <div class="chart-subtitle">Gürültülü · Temiz Referans · Filtrelenmiş</div>
+              </div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-line" style="background:#5aabff"></div>Gürültülü</div>
+                <div class="legend-item"><div class="legend-line" style="background:#3dffa0"></div>Temiz Ref</div>
+                <div class="legend-item"><div class="legend-line" style="background:#ff7a5c"></div>Filtrelenmiş</div>
+              </div>
+            </div>
+            <canvas id="s-signal-canvas" class="signal-canvas"></canvas>
+            <div class="canvas-tooltip" id="s-tooltip"></div>
+            <div class="canvas-hint">🖱 Kaydır: zoom &nbsp;|&nbsp; Sürükle: kaydır</div>
+            <div class="spinner-overlay" id="s-spinner"><div class="spinner"></div></div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Güç Spektral Yoğunluğu (PSD)</div>
+                <div class="chart-subtitle">Welch yöntemi — Hanning penceresi — logaritmik Y ekseni</div>
+              </div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-line" style="background:#5aabff"></div>Gürültülü</div>
+                <div class="legend-item"><div class="legend-line" style="background:#ff7a5c"></div>Filtrelenmiş</div>
+              </div>
+            </div>
+            <canvas id="s-psd-canvas" class="psd-canvas"></canvas>
+          </div>
+
+          <!-- ══ LOG PANELİ ══ -->
+          <div class="log-panel">
+            <div class="log-header" onclick="toggleLog()">
+              <div class="log-header-left">
+                <span style="font-size:1rem">📋</span>
+                <span class="log-header-title">İşlem Kaydı</span>
+                <span class="log-count" id="log-count">0</span>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center">
+                <button class="log-clear-btn" onclick="event.stopPropagation();clearLog()">Temizle</button>
+                <span class="log-toggle" id="log-toggle">▼</span>
+              </div>
+            </div>
+            <div id="log-body" class="log-body">
+              <div class="log-empty" id="log-empty">Henüz kayıt yok. Sinyal oluşturun veya filtre uygulayın.</div>
+            </div>
+          </div>
+
+        </div><!-- /charts-area -->
+      </div>
+    </div>
+  </div><!-- /tab-synthetic -->
+
+  <!-- ════════════════════ TAB 3: JİROSKOP ANALİZİ ════════════════════ -->
+  <div id="tab-gyro" class="tab-panel">
+    <div class="layout">
+      <div class="sidebar">
+
+        <!-- Veri Kaynağı -->
+        <div class="panel">
+          <div class="panel-title">Veri Kaynağı</div>
+
+          <div class="form-group">
+            <div class="form-label">Kaynak</div>
+            <select id="gyro-source" onchange="onGyroSourceChange()">
+              <option value="sim">Simüle Edilmiş Veri</option>
+              <option value="csv">CSV Dosyası Yükle</option>
+            </select>
+          </div>
+
+          <!-- Simüle edilmiş veri parametreleri -->
+          <div id="gyro-sim-params">
+            <div class="form-group">
+              <div class="form-label">Süre<span class="val"><span id="gyro-dur-val">10</span> s</span></div>
+              <input type="range" id="gyro-dur" min="2" max="60" value="10"
+                oninput="document.getElementById('gyro-dur-val').textContent=this.value">
+            </div>
+            <div class="form-group">
+              <div class="form-label">Örnekleme Frekansı<span class="val"><span id="gyro-fs-val">200</span> Hz</span></div>
+              <input type="number" id="gyro-fs" value="200" min="50" max="2000" step="50"
+                oninput="document.getElementById('gyro-fs-val').textContent=this.value">
+            </div>
+            <div class="form-group">
+              <div class="form-label">Sabit Dönüş Hızı<span class="val"><span id="gyro-rot-val">30</span> °/s</span></div>
+              <input type="range" id="gyro-rot" min="-180" max="180" value="30"
+                oninput="document.getElementById('gyro-rot-val').textContent=this.value">
+            </div>
+            <div class="form-group">
+              <div class="form-label">Salınım Genliği<span class="val"><span id="gyro-osc-val">15</span> °/s</span></div>
+              <input type="range" id="gyro-osc" min="0" max="90" value="15"
+                oninput="document.getElementById('gyro-osc-val').textContent=this.value">
+            </div>
+            <div class="form-group">
+              <div class="form-label">Gürültü<span class="val"><span id="gyro-noise-val">2</span> °/s</span></div>
+              <input type="range" class="orange" id="gyro-noise" min="0" max="20" step="0.5" value="2"
+                oninput="document.getElementById('gyro-noise-val').textContent=this.value">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Lineer Drift<span class="val"><span id="gyro-drift-val">0.5</span> °/s²</span></div>
+              <input type="range" class="green-r" id="gyro-drift" min="0" max="5" step="0.1" value="0.5"
+                oninput="document.getElementById('gyro-drift-val').textContent=this.value">
+            </div>
+          </div>
+
+          <!-- CSV yükleme -->
+          <div id="gyro-csv-params" style="display:none">
+            <div class="drop-zone" id="gyro-drop-zone" onclick="document.getElementById('gyro-file-input').click()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              <p>CSV yükle — tek sütun <strong>°/s</strong> verisi</p>
+            </div>
+            <div class="file-info" id="gyro-file-info"></div>
+            <input type="file" id="gyro-file-input" accept=".csv" style="display:none" onchange="handleGyroFile(this)">
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Örnekleme Frekansı<span class="val"><span id="gyro-csv-fs-val">200</span> Hz</span></div>
+              <input type="number" id="gyro-csv-fs" value="200" min="1" max="5000"
+                oninput="document.getElementById('gyro-csv-fs-val').textContent=this.value">
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="margin-top:14px" onclick="runGyroAnalysis()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Açıya Çevir
+          </button>
+        </div>
+
+        <!-- Drift Düzeltme -->
+        <div class="panel">
+          <div class="panel-title">Drift Düzeltme (HPF)</div>
+          <p style="font-size:0.78rem;color:var(--text-mid);line-height:1.65;margin-bottom:14px">
+            Jiroskop drift'i yüksek geçiren Butterworth filtreyle (<strong>HPF</strong>) kaldırılır. Çok yüksek kesme = gerçek hareketi bozar. Çok düşük = drift kalır.
+          </p>
+
+          <div class="form-group">
+            <div class="form-label">HPF Kesme Frekansı<span class="val"><span id="hpf-val">0.05</span> Hz</span></div>
+            <input type="range" class="green-r" id="gyro-hpf" min="0.005" max="2" step="0.005" value="0.05"
+              oninput="document.getElementById('hpf-val').textContent=parseFloat(this.value).toFixed(3)">
+          </div>
+
+          <div class="form-group" style="margin-bottom:0">
+            <div class="form-label">Birim</div>
+            <select id="gyro-unit">
+              <option value="degs">°/s (derece/saniye)</option>
+              <option value="rads">rad/s (radyan/saniye)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Algoritma Adımları -->
+        <div class="panel">
+          <div class="panel-title">Algoritma</div>
+          <div class="algo-steps">
+            <div class="algo-step">
+              <div class="algo-step-num">1</div>
+              <div><strong>Birim Dönüşümü</strong><br>rad/s → °/s (seçiliyse)</div>
+            </div>
+            <div class="algo-step">
+              <div class="algo-step-num">2</div>
+              <div><strong>Trapez İntegrasyon</strong><br>ω(t) dt ile kümülatif açı hesabı (cumtrapz)</div>
+            </div>
+            <div class="algo-step">
+              <div class="algo-step-num">3</div>
+              <div><strong>HPF ile Drift Düzeltme</strong><br>Butterworth yüksek geçiren filtre, sıfır faz (forward + reverse)</div>
+            </div>
+          </div>
+          <div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);line-height:1.6;padding:8px 10px;background:var(--card);border-radius:6px;border:1px solid var(--border)">
+            θ(t) = HPF{ ∫ω(τ)dτ }<br>HPF_fc önerisi: 0.01–0.1 Hz
+          </div>
+        </div>
+
+        <!-- Dışa aktar -->
+        <div class="panel">
+          <div class="panel-title">Dışa Aktar</div>
+          <button class="btn btn-success btn-sm" onclick="exportGyroCSV()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Açı Verisini CSV İndir
+          </button>
+        </div>
+
+      </div><!-- /sidebar -->
+
+      <div>
+        <!-- Status -->
+        <div class="status-bar">
+          <div class="status-dot" id="g-status-dot"></div>
+          <span class="status-text" id="g-status-text">Analiz bekleniyor…</span>
+        </div>
+
+        <!-- Metrikler -->
+        <div class="gyro-metrics">
+          <div class="gyro-metric-card ang">
+            <div class="metric-label">Toplam Açı</div>
+            <div class="metric-desc">Drift düzeltme öncesi ham integrasyon</div>
+            <div class="gyro-metric-val ang-val" id="g-total-angle">—</div>
+            <div class="metric-unit">derece (ham)</div>
+          </div>
+          <div class="gyro-metric-card drift">
+            <div class="metric-label">Drift Miktarı</div>
+            <div class="metric-desc">HPF'in kaldırdığı düşük frekanslı bileşen</div>
+            <div class="gyro-metric-val drift-val" id="g-drift-removed">—</div>
+            <div class="metric-unit">derece (kaldırılan)</div>
+          </div>
+          <div class="gyro-metric-card ang" style="--col:var(--green)">
+            <div class="metric-label">Düzeltilmiş Açı Aralığı</div>
+            <div class="metric-desc">min → max (HPF sonrası)</div>
+            <div class="gyro-metric-val" style="color:var(--green);font-size:1.15rem;text-shadow:0 0 14px rgba(61,255,160,0.35)" id="g-angle-range">—</div>
+            <div class="metric-unit">derece</div>
+          </div>
+          <div class="gyro-metric-card drift">
+            <div class="metric-label">Örnekleme / Süre</div>
+            <div class="metric-desc">Jiroskop kayıt bilgisi</div>
+            <div class="gyro-metric-val" style="color:var(--blue);font-size:1.1rem;text-shadow:0 0 14px rgba(90,171,255,0.35)" id="g-fs-dur">—</div>
+            <div class="metric-unit">Hz / saniye</div>
+          </div>
+        </div>
+
+        <!-- Grafik: Açısal Hız -->
+        <div class="charts-area">
+          <div class="chart-container" style="position:relative">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Açısal Hız — Zaman Alanı</div>
+                <div class="chart-subtitle">Jiroskop ham verisi · drift + gürültü bileşenleriyle</div>
+              </div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-line" style="background:var(--purple)"></div>Açısal Hız (°/s)</div>
+              </div>
+            </div>
+            <canvas id="g-vel-canvas" class="gyro-canvas"></canvas>
+            <div class="canvas-tooltip" id="g-vel-tooltip"></div>
+            <div class="canvas-hint">🖱 Kaydır: zoom &nbsp;|&nbsp; Sürükle: kaydır</div>
+            <div class="spinner-overlay" id="g-spinner"><div class="spinner"></div></div>
+          </div>
+
+          <!-- Grafik: Ham Açı -->
+          <div class="chart-container" style="position:relative">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Hesaplanan Açı — Drift Karşılaştırması</div>
+                <div class="chart-subtitle">Ham integrasyon (drift'li) · HPF ile düzeltilmiş açı</div>
+              </div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-line" style="background:var(--yellow)"></div>Ham (drift'li)</div>
+                <div class="legend-item"><div class="legend-line" style="background:var(--green)"></div>Düzeltilmiş</div>
+              </div>
+            </div>
+            <canvas id="g-angle-canvas" class="gyro-canvas"></canvas>
+            <div class="canvas-tooltip" id="g-angle-tooltip"></div>
+            <div class="canvas-hint">🖱 Kaydır: zoom &nbsp;|&nbsp; Sürükle: kaydır</div>
+          </div>
+
+          <!-- Log Panel -->
+          <div class="log-panel">
+            <div class="log-header" onclick="toggleGyroLog()">
+              <div class="log-header-left">
+                <span style="font-size:1rem">🔄</span>
+                <span class="log-header-title">Jiroskop İşlem Kaydı</span>
+                <span class="log-count" id="gyro-log-count">0</span>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center">
+                <button class="log-clear-btn" onclick="event.stopPropagation();clearGyroLog()">Temizle</button>
+                <span class="log-toggle open" id="gyro-log-toggle">▼</span>
+              </div>
+            </div>
+            <div id="gyro-log-body" class="log-body">
+              <div class="log-empty" id="gyro-log-empty">Henüz kayıt yok. "Açıya Çevir" butonuna tıklayın.</div>
+            </div>
+          </div>
+
+        </div><!-- /charts-area -->
+      </div>
+    </div>
+  </div><!-- /tab-gyro -->
+
+</div><!-- /app-wrapper -->
+
+<script>
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+const state = {
+  process: {
+    raw:null, filtered:null, ref:null,
+    fs:2000, filterType:'bw',
+    view:{offsetX:0, scaleX:1}
+  },
+  synthetic: {
+    raw:null, filtered:null, ref:null,
+    fs:2000, filterType:'bw',
+    view:{offsetX:0, scaleX:1}
+  }
+};
+
+let logOpen = true;
+
+// ════════════════════════════════════════════════
+//  LOG SİSTEMİ
+// ════════════════════════════════════════════════
+const LOG_ICONS = { info:'ℹ', success:'✓', warn:'⚠', error:'✕', step:'→' };
+
+function addLog(msg, type='info') {
+  const body = document.getElementById('log-body');
+  const empty = document.getElementById('log-empty');
+  if(empty) empty.remove();
+
+  const now = new Date();
+  const time = now.toTimeString().slice(0,8);
+
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  entry.innerHTML =
+    `<span class="log-time">${time}</span>` +
+    `<span class="log-icon">${LOG_ICONS[type]||'·'}</span>` +
+    `<span class="log-msg">${msg}</span>`;
+
+  body.appendChild(entry);
+  body.scrollTop = body.scrollHeight;
+
+  // count
+  const entries = body.querySelectorAll('.log-entry');
+  document.getElementById('log-count').textContent = entries.length;
+}
+
+// Helper: renkli değer etiketi
+function lv(val, color='') {
+  return `<span class="log-val ${color}">${val}</span>`;
+}
+
+function clearLog() {
+  const body = document.getElementById('log-body');
+  body.innerHTML = '<div class="log-empty" id="log-empty">Log temizlendi.</div>';
+  document.getElementById('log-count').textContent = '0';
+}
+
+function toggleLog() {
+  logOpen = !logOpen;
+  const body = document.getElementById('log-body');
+  const toggle = document.getElementById('log-toggle');
+  body.style.display = logOpen ? '' : 'none';
+  toggle.classList.toggle('open', logOpen);
+}
+
+// ════════════════════════════════════════════════
+//  TABS
+// ════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    b.classList.toggle('active', (name==='process'&&i===0)||(name==='synthetic'&&i===1));
+  });
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  setTimeout(()=>{
+    ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas'].forEach(resizeCanvas);
+    redrawAll();
+  }, 50);
+}
+
+function switchFilter(el, type, prefix) {
+  el.parentElement.querySelectorAll('.filter-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const p = prefix==='p'?'p':'s';
+  document.querySelectorAll(`[id^="${p}-"]`).forEach(sec=>{
+    if(sec.classList.contains('filter-section')) sec.classList.remove('active');
+  });
+  const sec = document.getElementById(`${p}-${type}`);
+  if(sec) sec.classList.add('active');
+  state[prefix==='p'?'process':'synthetic'].filterType = type;
+}
+
+// ════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  const icons={success:'✓',error:'✕',info:'ℹ'};
+  el.innerHTML=`<span>${icons[type]||'ℹ'}</span><span>${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>el.remove(), 3200);
+}
+
+function setStatus(prefix, msg, active=false) {
+  document.getElementById(`${prefix}-status-text`).textContent = msg;
+  document.getElementById(`${prefix}-status-dot`).classList.toggle('active', active);
+}
+
+function showSpinner(id, show) {
+  document.getElementById(id).style.display = show ? 'flex' : 'none';
+}
+
+// ════════════════════════════════════════════════
+//  CSV
+// ════════════════════════════════════════════════
+function handleFileInput(input) {
+  if(!input.files[0]) return;
+  loadCSVFile(input.files[0]);
+}
+
+function loadCSVFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const lines = e.target.result.trim().split('\n').filter(l=>l.trim());
+      let start = isNaN(parseFloat(lines[0].split(',')[0])) ? 1 : 0;
+      const data = [];
+      for(let i=start;i<lines.length;i++){
+        const cols=lines[i].split(',').map(Number);
+        if(!isNaN(cols[0])) data.push(cols);
+      }
+      if(data.length<10){toast('Geçersiz CSV!','error');return;}
+      const fs = parseInt(document.getElementById('fs-input').value)||2000;
+      const col0=data.map(r=>r[0]);
+      const isTime=col0.every((v,i)=>i===0||v>col0[i-1]);
+      const signal=isTime?data.map(r=>r[1]||0):data.map(r=>r[0]);
+      state.process.raw=new Float64Array(signal);
+      state.process.filtered=null; state.process.fs=fs;
+      state.process.view={offsetX:0,scaleX:1};
+      document.getElementById('file-info').style.display='block';
+      document.getElementById('file-info').textContent=`✓ ${file.name}  ·  ${signal.length} örnek  ·  ${fs} Hz`;
+      setStatus('p',`${file.name} yüklendi — ${signal.length} örnek`,true);
+      toast(`Yüklendi: ${file.name}`,'success');
+      updateMetrics('p'); redrawAll();
+    }catch(err){toast('CSV hatası: '+err.message,'error');}
+  };
+  reader.readAsText(file);
+}
+
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files[0])loadCSVFile(e.dataTransfer.files[0]);});
+
+// ════════════════════════════════════════════════
+//  SIGNAL PROCESSING
+// ════════════════════════════════════════════════
+function fft(re,im){
+  const n=re.length; if(n<=1)return;
+  let j=0;
+  for(let i=1;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]];}}
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let k=0;k<len/2;k++){const ur=re[i+k],ui=im[i+k],vr=re[i+k+len/2]*cr-im[i+k+len/2]*ci,vi=re[i+k+len/2]*ci+im[i+k+len/2]*cr;re[i+k]=ur+vr;im[i+k]=ui+vi;re[i+k+len/2]=ur-vr;im[i+k+len/2]=ui-vi;const ncr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=ncr;}}
+  }
+}
+
+function computePSD(signal,fs){
+  const n=signal.length;
+  let nfft=256; while(nfft<Math.min(n,4096))nfft<<=1;
+  const hop=nfft>>1; const psd=new Float64Array(nfft/2+1); let count=0;
+  const win=new Float64Array(nfft);
+  for(let i=0;i<nfft;i++)win[i]=0.5*(1-Math.cos(2*Math.PI*i/(nfft-1)));
+  const wp=win.reduce((a,v)=>a+v*v,0);
+  for(let s=0;s+nfft<=n;s+=hop){
+    const re=new Float64Array(nfft),im=new Float64Array(nfft);
+    for(let i=0;i<nfft;i++)re[i]=signal[s+i]*win[i];
+    fft(re,im);
+    for(let i=0;i<=nfft/2;i++)psd[i]+=(re[i]*re[i]+im[i]*im[i])/(fs*wp);
+    count++;
+  }
+  if(count>0)for(let i=0;i<psd.length;i++)psd[i]/=count;
+  for(let i=1;i<psd.length-1;i++)psd[i]*=2;
+  const freqs=new Float64Array(nfft/2+1);
+  for(let i=0;i<freqs.length;i++)freqs[i]=i*fs/nfft;
+  return {freqs,psd};
+}
+
+function medianFreq(signal,fs){
+  const {freqs,psd}=computePSD(signal,fs);
+  const tot=psd.reduce((a,v)=>a+v,0); let cum=0;
+  for(let i=0;i<psd.length;i++){cum+=psd[i];if(cum>=tot/2)return freqs[i];}
+  return freqs[freqs.length-1];
+}
+
+function rms(signal){ let s=0;for(const v of signal)s+=v*v;return Math.sqrt(s/signal.length); }
+
+function snrCalc(filtered,ref){
+  let ps=0,pn=0;
+  for(let i=0;i<Math.min(filtered.length,ref.length);i++){ps+=ref[i]*ref[i];const d=filtered[i]-ref[i];pn+=d*d;}
+  if(pn<1e-15)return Infinity;
+  return 10*Math.log10(ps/pn);
+}
+
+function computeMetrics(signal,ref,fs,prefix){
+  const r=rms(signal), mf=medianFreq(signal,fs);
+  const s=ref?snrCalc(signal,ref):null;
+  animateValue(`${prefix}-rms`,r.toFixed(4));
+  animateValue(`${prefix}-mf`,mf.toFixed(1));
+  animateValue(`${prefix}-snr`,s!==null&&isFinite(s)?s.toFixed(2):'—');
+  return {rms:r,mf,snr:s};
+}
+
+function updateMetrics(prefix){
+  const tab=prefix==='p'?'process':'synthetic';
+  const s=state[tab]; const sig=s.filtered||s.raw;
+  if(!sig)return;
+  computeMetrics(sig,s.ref,s.fs,prefix);
+}
+
+function animateValue(id,val){
+  const el=document.getElementById(id); if(!el)return;
+  el.style.transform='scale(1.07)'; el.textContent=val;
+  setTimeout(()=>el.style.transform='',220);
+}
+
+// ─── Butterworth ───
+function iirFilter(signal,b,a){
+  const n=signal.length,out=new Float64Array(n),ord=b.length-1,w=new Float64Array(ord+1);
+  for(let i=0;i<n;i++){
+    let wn=signal[i]; for(let k=1;k<=ord;k++)wn-=a[k]*(w[k-1]||0);
+    let yn=b[0]*wn;   for(let k=1;k<=ord;k++)yn+=b[k]*(w[k-1]||0);
+    for(let k=ord-1;k>0;k--)w[k]=w[k-1]; w[0]=wn; out[i]=yn/a[0];
+  }
+  return out;
+}
+
+function butterworthBandpass(signal,fs,lowHz,highHz){
+  const nyq=fs/2;
+  lowHz=Math.max(1,Math.min(lowHz,nyq*0.95));
+  highHz=Math.max(lowHz+1,Math.min(highHz,nyq*0.99));
+  const wl=Math.tan(Math.PI*lowHz/fs), wh=Math.tan(Math.PI*highHz/fs);
+  const kl=1/(1+Math.SQRT2*wl+wl*wl);
+  const bHP=[kl,-2*kl,kl], aHP=[1,2*kl*(wl*wl-1),kl*(1-Math.SQRT2*wl+wl*wl)];
+  const kh=wh*wh/(1+Math.SQRT2*wh+wh*wh);
+  const bLP=[kh,2*kh,kh], aLP=[1,2*kh*(wh*wh-1)/(wh*wh),(1-Math.SQRT2*wh+wh*wh)/(1+Math.SQRT2*wh+wh*wh)];
+  let y=iirFilter(signal,bHP,aHP); y=iirFilter(y,bLP,aLP);
+  y=iirFilter(y.slice().reverse(),bHP,aHP).reverse();
+  y=iirFilter(y.slice().reverse(),bLP,aLP).reverse();
+  return y;
+}
+
+// ─── Notch ───
+function iirZeroPhase(signal,b,a){
+  let y=iirFilter(signal,b,a);
+  y=iirFilter(Array.from(y).reverse(),b,a).reverse();
+  return y instanceof Float64Array?y:new Float64Array(y);
+}
+
+function notchFilter(signal,fs,f0,Q){
+  const w0=2*Math.PI*f0/fs, bw=w0/Q, gb=Math.cos(w0), k=Math.tan(bw/2), d=1+k;
+  const b=[1/d,-2*gb/d,1/d], a=[1,-2*gb/d,(1-k)/d];
+  let y=iirZeroPhase(signal,b,a);
+  const f2=2*f0; if(f2<fs/2){
+    const w2=2*Math.PI*f2/fs,bw2=w2/(Q*1.5),gb2=Math.cos(w2),k2=Math.tan(bw2/2),d2=1+k2;
+    y=iirZeroPhase(y,[1/d2,-2*gb2/d2,1/d2],[1,-2*gb2/d2,(1-k2)/d2]);
+  }
+  return y;
+}
+
+// ─── Moving Average ───
+function movingAverage(signal,win){
+  win=Math.max(1,Math.min(win,signal.length));
+  const out=new Float64Array(signal.length); let sum=0,count=0;
+  const half=Math.floor(win/2);
+  for(let i=0;i<signal.length;i++){
+    if(i+half<signal.length){sum+=signal[i+half];count++;}
+    if(i-half-1>=0){sum-=signal[i-half-1];count--;}
+    out[i]=sum/count;
+  }
+  return out;
+}
+
+// ─── Apply Filter ───
+function applyFilter(tab){
+  const prefix=tab==='process'?'p':'s';
+  const s=state[tab==='process'?'process':'synthetic'];
+  if(!s.raw){toast('Önce sinyal yükleyin / oluşturun!','error');return;}
+  showSpinner(`${prefix}-spinner`,true);
+
+  // Log: filtre başlıyor
+  if(tab==='synthetic'){
+    const names={bw:'Butterworth Bandpass',notch:'Notch',ma:'Hareketli Ortalama',chain:'Zincir (BP+Notch)'};
+    addLog(`Filtre başlatılıyor → ${lv(names[s.filterType],'blue')}`, 'step');
+    addLog(`Sinyal uzunluğu: ${lv(s.raw.length)} örnek  |  Fs: ${lv(s.fs+' Hz','blue')}`, 'info');
+  }
+
+  setTimeout(()=>{
+    try{
+      const ft=s.filterType, fs=s.fs, raw=s.raw;
+      let filtered;
+      const t0=performance.now();
+
+      if(ft==='bw'){
+        const low=parseInt(document.getElementById(`${prefix}-low`)?.value||20);
+        const high=parseInt(document.getElementById(`${prefix}-high`)?.value||450);
+        if(tab==='synthetic') addLog(`Butterworth parametreleri: alt=${lv(low+' Hz','orange')}  üst=${lv(high+' Hz','orange')}  mertebe=2 (zero-phase)`, 'info');
+        filtered=butterworthBandpass(raw,fs,low,high);
+      }else if(ft==='notch'){
+        const f0=parseInt(document.getElementById(`${prefix}-notch-freq`)?.value||50);
+        const Q=parseInt(document.getElementById(`${prefix}-q`)?.value||35);
+        if(tab==='synthetic') addLog(`Notch IIR: f₀=${lv(f0+' Hz','orange')}  Q=${lv(Q)}  (1. ve 2. harmonik temizlenir)`, 'info');
+        filtered=notchFilter(raw,fs,f0,Q);
+      }else if(ft==='ma'){
+        const win=parseInt(document.getElementById(`${prefix}-win`)?.value||10);
+        if(tab==='synthetic') addLog(`Hareketli Ortalama: pencere boyutu=${lv(win)} örnek`, 'info');
+        filtered=movingAverage(raw,win);
+      }else if(ft==='chain'){
+        if(tab==='synthetic') addLog('Zincir ① Butterworth BP (20–450 Hz) uygulanıyor…', 'step');
+        let tmp=butterworthBandpass(raw,fs,20,450);
+        if(tab==='synthetic') addLog('Zincir ② Notch (50 Hz, Q=35) uygulanıyor…', 'step');
+        filtered=notchFilter(tmp,fs,50,35);
+      }
+
+      const elapsed=(performance.now()-t0).toFixed(1);
+      s.filtered=filtered instanceof Float64Array?filtered:new Float64Array(filtered);
+      setStatus(prefix,'Filtre uygulandı ✓',true);
+      toast('Filtre uygulandı','success');
+      updateMetrics(prefix);
+
+      // SNR hesabı ve log
+      if(prefix==='s'&&s.ref){
+        const sval=snrCalc(s.filtered,s.ref);
+        const svalStr=isFinite(sval)?sval.toFixed(2):'∞';
+        animateValue('s-ref-snr',svalStr);
+        if(tab==='synthetic'){
+          addLog(`Filtre tamamlandı — süre: ${lv(elapsed+' ms')}`, 'success');
+          addLog(`RMS (sonrası): ${lv(rms(s.filtered).toFixed(5),'blue')}  |  Median Frekans: ${lv(medianFreq(s.filtered,s.fs).toFixed(1)+' Hz','orange')}`, 'info');
+          const snrColor = sval>10?'green':sval>0?'yellow':'orange';
+          addLog(`Referans SNR: ${lv(svalStr+' dB', snrColor)} ${sval>15?'🎉 Mükemmel':sval>8?'👍 İyi':sval>3?'⚠ Orta':'❌ Yetersiz'}`, sval>8?'success':'warn');
+        }
+      }else{
+        if(tab==='synthetic') addLog(`Filtre tamamlandı — süre: ${lv(elapsed+' ms')}`, 'success');
+      }
+      redrawAll();
+    }catch(err){
+      toast('Filtre hatası: '+err.message,'error');
+      if(tab==='synthetic') addLog('HATA: '+err.message,'error');
+    }finally{
+      showSpinner(`${prefix}-spinner`,false);
+    }
+  },30);
+}
+
+// ════════════════════════════════════════════════
+//  SYNTHETIC EMG
+// ════════════════════════════════════════════════
+function seededRandom(seed){
+  return function(){
+    seed|=0; seed=seed+0x6D2B79F5|0;
+    let t=Math.imul(seed^seed>>>15,1|seed);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
+}
+
+function boxMuller(rand){
+  return Math.sqrt(-2*Math.log(rand()+1e-12))*Math.cos(2*Math.PI*rand());
+}
+
+function generateSyntheticEMG_fn(fs,duration,noiseLevel,add50hz,addBaseline){
+  const N=Math.round(fs*duration);
+  const t=new Float64Array(N);
+  for(let i=0;i<N;i++)t[i]=i/fs;
+  const rand=seededRandom(Date.now()&0xFFFFFF);
+
+  const gauss=new Float64Array(N);
+  for(let i=0;i<N;i++)gauss[i]=boxMuller(rand);
+  let emgBase=butterworthBandpass(gauss,fs,20,450);
+
+  const envelope=new Float64Array(N);
+  for(let b=0;b<3;b++){
+    const ts=(b+0.3)*duration/3, td=0.3+rand()*0.4, amp=0.5+rand()*1.0;
+    const i0=Math.max(0,Math.round(ts*fs)), i1=Math.min(N-1,Math.round((ts+td)*fs));
+    const len=i1-i0+1;
+    for(let k=0;k<len;k++) envelope[i0+k]+=amp*0.5*(1-Math.cos(2*Math.PI*k/(len-1)));
+  }
+
+  const clean=new Float64Array(N); let stdEMG=0;
+  for(let i=0;i<N;i++){clean[i]=emgBase[i]*(0.2+envelope[i]);stdEMG+=clean[i]*clean[i];}
+  stdEMG=Math.sqrt(stdEMG/N);
+  const scale=1/(3*stdEMG+1e-12);
+  for(let i=0;i<N;i++)clean[i]*=scale;
+
+  const noisy=new Float64Array(N), sigRMS=rms(clean), noiseAmp=(noiseLevel/100)*sigRMS;
+  for(let i=0;i<N;i++)noisy[i]=clean[i]+noiseAmp*boxMuller(rand);
+
+  if(add50hz){
+    const a50=0.3*sigRMS,a100=0.1*sigRMS,a150=0.05*sigRMS;
+    const p50=rand()*2*Math.PI,p100=rand()*2*Math.PI,p150=rand()*2*Math.PI;
+    for(let i=0;i<N;i++) noisy[i]+=a50*Math.sin(2*Math.PI*50*t[i]+p50)+a100*Math.sin(2*Math.PI*100*t[i]+p100)+a150*Math.sin(2*Math.PI*150*t[i]+p150);
+  }
+  if(addBaseline){
+    const abl=0.8*sigRMS, f1=0.3+rand()*0.5, f2=0.8+rand()*0.7;
+    const p1=rand()*2*Math.PI, p2=rand()*2*Math.PI;
+    for(let i=0;i<N;i++) noisy[i]+=abl*Math.sin(2*Math.PI*f1*t[i]+p1)+(abl/2)*Math.sin(2*Math.PI*f2*t[i]+p2);
+  }
+
+  return {noisy,clean,t};
+}
+
+function generateSynthetic(){
+  const fs=parseInt(document.getElementById('syn-fs').value)||2000;
+  const duration=parseFloat(document.getElementById('syn-dur').value)||3;
+  const noise=parseFloat(document.getElementById('syn-noise').value)||40;
+  const add50=document.getElementById('add-50hz').checked;
+  const addBL=document.getElementById('add-baseline').checked;
+
+  showSpinner('s-spinner',true);
+
+  // LOG
+  addLog('━━━ Yeni Sentetik EMG Üretimi ━━━','step');
+  addLog(`Parametreler: Fs=${lv(fs+' Hz','blue')}  Süre=${lv(duration+' s')}  Gürültü=${lv(noise+'%','orange')}`, 'info');
+  if(add50)  addLog(`50 Hz şebeke gürültüsü ${lv('ETKİN','orange')} (harmonikler: 100, 150 Hz)`, 'warn');
+  else       addLog('50 Hz şebeke gürültüsü: devre dışı', 'info');
+  if(addBL)  addLog(`Baseline wander ${lv('ETKİN','orange')} (0.3–1.5 Hz sinüsoidal kayma)`, 'warn');
+  else       addLog('Baseline wander: devre dışı', 'info');
+  addLog('① Gaussian beyaz gürültü → Butterworth BP (20–450 Hz) → EMG tabanı', 'step');
+  addLog('② Hanning pencereli burst zarfları ekleniyor (3 kasılma)', 'step');
+
+  setTimeout(()=>{
+    try{
+      const t0=performance.now();
+      const {noisy,clean}=generateSyntheticEMG_fn(fs,duration,noise,add50,addBL);
+      const elapsed=(performance.now()-t0).toFixed(1);
+
+      state.synthetic.raw=noisy;
+      state.synthetic.ref=clean;
+      state.synthetic.filtered=null;
+      state.synthetic.fs=fs;
+      state.synthetic.view={offsetX:0,scaleX:1};
+
+      const rmsClean=rms(clean), rmsNoisy=rms(noisy);
+      const mfClean=medianFreq(clean,fs), mfNoisy=medianFreq(noisy,fs);
+
+      addLog(`✓ Sinyal üretildi — ${lv(noisy.length+' örnek')}  süre: ${lv(elapsed+' ms')}`, 'success');
+      addLog(`Temiz ref → RMS: ${lv(rmsClean.toFixed(5),'green')}  |  Median Freq: ${lv(mfClean.toFixed(1)+' Hz','green')}`, 'info');
+      addLog(`Gürültülü → RMS: ${lv(rmsNoisy.toFixed(5),'orange')}  |  Median Freq: ${lv(mfNoisy.toFixed(1)+' Hz','orange')}`, 'info');
+
+      if(add50||addBL){
+        addLog(`PSD'de beklenen gürültü bileşenleri: ${add50?lv('50 Hz','orange'):''}  ${addBL?lv('< 2 Hz','yellow'):''}`, 'warn');
+      }
+
+      setStatus('s',`Sentetik EMG: ${fs}Hz | ${duration}s | %${Math.round(noise)} gürültü`,true);
+      toast('Sentetik sinyal oluşturuldu','success');
+      document.getElementById('s-ref-snr').textContent='—';
+      updateMetrics('s');
+      redrawAll();
+    }catch(err){
+      toast('Üretim hatası: '+err.message,'error');
+      addLog('HATA: '+err.message,'error');
+    }finally{
+      showSpinner('s-spinner',false);
+    }
+  },30);
+}
+
+// ════════════════════════════════════════════════
+//  CANVAS
+// ════════════════════════════════════════════════
+function resizeCanvas(id){
+  const c=document.getElementById(id); if(!c)return;
+  const rect=c.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1;
+  c.width=Math.round(rect.width*dpr);
+  c.height=Math.round(rect.height*dpr);
+  const ctx=c.getContext('2d'); ctx.scale(dpr,dpr);
+}
+
+function drawSignal(canvasId,signals,colors,view){
+  const c=document.getElementById(canvasId); if(!c)return;
+  const ctx=c.getContext('2d');
+  const W=c.clientWidth, H=c.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#07090f'; ctx.fillRect(0,0,W,H);
+
+  const pad={l:58,r:18,t:16,b:38};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+  // Empty state
+  const validSigs=signals.filter(Boolean);
+  if(!validSigs.length){
+    ctx.fillStyle='rgba(74,96,122,0.4)';
+    ctx.font=`14px JetBrains Mono,monospace`;
+    ctx.textAlign='center';
+    ctx.fillText('Veri bekleniyor…',W/2,H/2);
+    return;
+  }
+
+  const n=validSigs[0].length;
+  const x0=Math.max(0,Math.round(view.offsetX));
+  const viewLen=Math.min(n,Math.max(10,Math.round(n/view.scaleX)));
+  const x1=Math.min(n,x0+viewLen);
+
+  let yMin=Infinity, yMax=-Infinity;
+  validSigs.forEach(s=>{for(let i=x0;i<x1;i++){if(s[i]<yMin)yMin=s[i];if(s[i]>yMax)yMax=s[i];}});
+  const yRange=yMax-yMin||1, yPad=yRange*0.12;
+  yMin-=yPad; yMax+=yPad;
+
+  const fs=state.process.fs||state.synthetic.fs||2000;
+
+  // Grid
+  const nX=6, nY=5;
+  ctx.strokeStyle='rgba(255,255,255,0.045)'; ctx.lineWidth=1;
+  for(let i=0;i<=nX;i++){const x=pad.l+pw*i/nX; ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,pad.t+ph);ctx.stroke();}
+  for(let i=0;i<=nY;i++){const y=pad.t+ph*i/nY; ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+pw,y);ctx.stroke();}
+
+  // Y axis labels
+  ctx.fillStyle='rgba(128,153,187,0.8)';
+  ctx.font='10px JetBrains Mono,monospace'; ctx.textAlign='right';
+  for(let i=0;i<=nY;i++){
+    const v=yMax-(yMax-yMin)*i/nY;
+    ctx.fillText(v.toFixed(3),pad.l-6,pad.t+ph*i/nY+4);
+  }
+
+  // X axis labels (time)
+  ctx.textAlign='center';
+  ctx.fillStyle='rgba(128,153,187,0.7)';
+  ctx.font='10px JetBrains Mono,monospace';
+  for(let i=0;i<=nX;i++){
+    const idx=Math.round(x0+viewLen*i/nX);
+    const tSec=(idx/fs).toFixed(2);
+    ctx.fillText(tSec+'s',pad.l+pw*i/nX,pad.t+ph+20);
+  }
+
+  // Axis titles
+  ctx.fillStyle='rgba(90,171,255,0.45)';
+  ctx.font='10px JetBrains Mono,monospace';
+  ctx.textAlign='center';
+  ctx.fillText('Zaman (s)',pad.l+pw/2,H-4);
+  ctx.save(); ctx.translate(13,pad.t+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('Genlik',0,0); ctx.restore();
+
+  // Zero line
+  if(yMin<0&&yMax>0){
+    const zy=pad.t+ph*(1-(0-yMin)/(yMax-yMin));
+    ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.setLineDash([4,6]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,zy); ctx.lineTo(pad.l+pw,zy); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Draw signals
+  signals.forEach((sig,si)=>{
+    if(!sig)return;
+    const alphas=[0.42,0.9,1.0];
+    const widths=[1,1.2,1.8];
+    ctx.strokeStyle=colors[si]; ctx.lineWidth=widths[si]||1.2;
+    ctx.globalAlpha=alphas[si]||0.9;
+    ctx.beginPath();
+    // Downsample for performance
+    const step=Math.max(1,Math.floor(viewLen/pw));
+    for(let i=x0;i<x1;i+=step){
+      const px=pad.l+pw*(i-x0)/viewLen;
+      const py=pad.t+ph*(1-(sig[i]-yMin)/(yMax-yMin));
+      i===x0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.stroke(); ctx.globalAlpha=1;
+  });
+}
+
+function drawPSD(canvasId,signals,fs,colors){
+  const c=document.getElementById(canvasId); if(!c)return;
+  const ctx=c.getContext('2d');
+  const W=c.clientWidth, H=c.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#07090f'; ctx.fillRect(0,0,W,H);
+
+  const pad={l:62,r:18,t:14,b:40};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+  const psds=signals.map(s=>s?computePSD(s,fs):null).filter(Boolean);
+  if(!psds.length){
+    ctx.fillStyle='rgba(74,96,122,0.35)';
+    ctx.font='12px JetBrains Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText('PSD için sinyal gerekli',W/2,H/2); return;
+  }
+
+  const nyq=fs/2;
+  const maxF=Math.min(nyq,600);
+  let pMin=1e30, pMax=-1e30;
+  psds.forEach(({psd})=>{for(const v of psd)if(v>0){if(v<pMin)pMin=v;if(v>pMax)pMax=v;}});
+  const logMin=Math.log10(pMin)-0.4, logMax=Math.log10(pMax)+0.4;
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1;
+  for(let i=0;i<=6;i++){const x=pad.l+pw*i/6;ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,pad.t+ph);ctx.stroke();}
+  for(let i=0;i<=5;i++){const y=pad.t+ph*i/5;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+pw,y);ctx.stroke();}
+
+  // Notable frequency markers
+  [50,100,150,200,300,450].forEach(f=>{
+    if(f>maxF)return;
+    const px=pad.l+pw*f/maxF;
+    ctx.strokeStyle='rgba(255,122,92,0.12)'; ctx.setLineDash([2,5]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(px,pad.t); ctx.lineTo(px,pad.t+ph); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,122,92,0.35)'; ctx.font='9px JetBrains Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText(f,px,pad.t+ph+14);
+  });
+
+  // Draw PSD curves
+  psds.forEach(({freqs,psd},si)=>{
+    ctx.strokeStyle=colors[si]||'#5aabff'; ctx.lineWidth=1.6;
+    ctx.shadowColor=colors[si]; ctx.shadowBlur=4;
+    ctx.beginPath(); let moved=false;
+    for(let i=0;i<freqs.length;i++){
+      if(freqs[i]>maxF)break; if(psd[i]<=0)continue;
+      const px=pad.l+pw*freqs[i]/maxF;
+      const logV=Math.log10(psd[i]);
+      const py=pad.t+ph*(1-(logV-logMin)/(logMax-logMin));
+      if(!moved){ctx.moveTo(px,py);moved=true;}else ctx.lineTo(px,py);
+    }
+    ctx.stroke(); ctx.shadowBlur=0;
+  });
+
+  // Y axis: log scale labels
+  ctx.fillStyle='rgba(128,153,187,0.75)';
+  ctx.font='10px JetBrains Mono,monospace'; ctx.textAlign='right';
+  for(let i=0;i<=5;i++){
+    const lv=logMax-(logMax-logMin)*i/5;
+    const label = lv>=0 ? `1e+${lv.toFixed(1)}` : `1e${lv.toFixed(1)}`;
+    ctx.fillText(label,pad.l-6,pad.t+ph*i/5+4);
+  }
+
+  // X axis labels
+  ctx.textAlign='center'; ctx.fillStyle='rgba(128,153,187,0.7)';
+  ctx.font='10px JetBrains Mono,monospace';
+  [0,100,200,300,400,500].filter(f=>f<=maxF).forEach(f=>{
+    const px=pad.l+pw*f/maxF;
+    ctx.fillText(f+'Hz',px,H-6);
+  });
+
+  // Axis titles
+  ctx.fillStyle='rgba(90,171,255,0.4)'; ctx.font='10px JetBrains Mono,monospace'; ctx.textAlign='center';
+  ctx.fillText('Frekans (Hz)',pad.l+pw/2,H-18);
+  ctx.save(); ctx.translate(11,pad.t+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('Güç (log)',0,0); ctx.restore();
+}
+
+function redrawAll(){
+  const p=state.process, s=state.synthetic;
+  drawSignal('p-signal-canvas',[p.raw,p.filtered],['#5aabff','#ff7a5c'],p.view);
+  drawPSD('p-psd-canvas',[p.raw,p.filtered].filter(Boolean),p.fs,['#5aabff','#ff7a5c']);
+  drawSignal('s-signal-canvas',[s.raw,s.ref,s.filtered],['#5aabff','#3dffa0','#ff7a5c'],s.view);
+  drawPSD('s-psd-canvas',[s.raw,s.filtered].filter(Boolean),s.fs,['#5aabff','#ff7a5c']);
+}
+
+// ════════════════════════════════════════════════
+//  INTERACTION
+// ════════════════════════════════════════════════
+function setupCanvasInteraction(canvasId,tooltipId,getState){
+  const c=document.getElementById(canvasId); if(!c)return;
+  let drag=false, dragX=null;
+
+  c.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const sv=getState(); if(!sv.raw)return;
+    const factor=e.deltaY<0?1.3:0.77;
+    const newScale=Math.max(1,Math.min(sv.raw.length,sv.view.scaleX*factor));
+    const visLen=sv.raw.length/sv.view.scaleX;
+    const mx=(e.clientX-c.getBoundingClientRect().left)/c.clientWidth;
+    sv.view.offsetX=Math.max(0,sv.view.offsetX+mx*visLen*(1-1/factor));
+    sv.view.scaleX=newScale;
+    sv.view.offsetX=Math.max(0,Math.min(sv.raw.length*(1-1/newScale),sv.view.offsetX));
+    redrawAll();
+  },{passive:false});
+
+  c.addEventListener('mousedown',e=>{drag=true;dragX=e.clientX;});
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const sv=getState(); if(!sv.raw)return;
+    const dx=(dragX-e.clientX)/c.clientWidth;
+    const visLen=sv.raw.length/sv.view.scaleX;
+    sv.view.offsetX=Math.max(0,Math.min(sv.raw.length-visLen,sv.view.offsetX+dx*visLen));
+    dragX=e.clientX; redrawAll();
+  });
+  window.addEventListener('mouseup',()=>{drag=false;});
+
+  // Tooltip
+  const tip=document.getElementById(tooltipId);
+  c.addEventListener('mousemove',e=>{
+    const sv=getState();
+    if(!sv.raw){tip.style.display='none';return;}
+    const rect=c.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)/rect.width;
+    const visLen=Math.round(sv.raw.length/sv.view.scaleX);
+    const idx=Math.round(sv.view.offsetX+mx*visLen);
+    if(idx<0||idx>=sv.raw.length){tip.style.display='none';return;}
+    const tSec=(idx/sv.fs).toFixed(4);
+    let html=`<span style="color:var(--text-dim)">t =</span> <b>${tSec} s</b><br>`;
+    html+=`<span style="color:#5aabff">Ham:  </span>${sv.raw[idx].toFixed(5)}`;
+    if(sv.filtered)html+=`<br><span style="color:#ff7a5c">Filt: </span>${sv.filtered[idx].toFixed(5)}`;
+    if(sv.ref)     html+=`<br><span style="color:#3dffa0">Ref:  </span>${sv.ref[idx].toFixed(5)}`;
+    tip.innerHTML=html;
+    tip.style.display='block';
+    tip.style.left=Math.min(e.clientX-rect.left+14,rect.width-170)+'px';
+    tip.style.top=Math.max(e.clientY-rect.top-55,5)+'px';
+  });
+  c.addEventListener('mouseleave',()=>{if(tip)tip.style.display='none';});
+}
+
+// ════════════════════════════════════════════════
+//  EXPORT
+// ════════════════════════════════════════════════
+function exportCSV(){
+  const s=state.process; if(!s.raw){toast('Veri yok!','error');return;}
+  let csv='Zaman_s,Ham,Filtrelenmis\n';
+  for(let i=0;i<s.raw.length;i++)
+    csv+=`${(i/s.fs).toFixed(6)},${s.raw[i].toFixed(8)},${s.filtered?s.filtered[i].toFixed(8):''}\n`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='filtrelenmis_emg.csv'; a.click();
+  toast('CSV indiriliyor…','success');
+}
+
+function exportJSON(){
+  const s=state.process; if(!s.raw){toast('Veri yok!','error');return;}
+  const obj={fs:s.fs,raw:Array.from(s.raw),filtered:s.filtered?Array.from(s.filtered):null};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(obj)],{type:'application/json'}));
+  a.download='emg_data.json'; a.click();
+  toast('JSON indiriliyor…','success');
+}
+
+// ════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas'].forEach(resizeCanvas);
+  setupCanvasInteraction('p-signal-canvas','p-tooltip',()=>state.process);
+  setupCanvasInteraction('s-signal-canvas','s-tooltip',()=>state.synthetic);
+
+  // Log paneli default açık
+  document.getElementById('log-toggle').classList.add('open');
+
+  // İlk log mesajı
+  addLog('Delsys Noise Master başlatıldı','success');
+  addLog(`Tarayıcı: ${navigator.userAgent.split(')')[0].split('(')[1]?.split(';')[0]||'Bilinmiyor'}`, 'info');
+  addLog('Sentetik Test sekmesinde sinyal oluşturun veya Veri İşleme sekmesinde CSV yükleyin', 'info');
+
+  redrawAll();
+  toast('Delsys Noise Master hazır','info');
+});
+
+window.addEventListener('resize',()=>{
+  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas'].forEach(resizeCanvas);
+  redrawAll();
+});
+</script>
+</body>
+</html>
