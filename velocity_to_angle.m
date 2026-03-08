@@ -60,6 +60,16 @@ function [angle_deg, angle_rad, t_out] = velocity_to_angle(gyro_data, fs, vararg
 %
 % =========================================================================
 
+% ---- Otomatik tip dönüşümü (table, timetable, int* vb.) ----
+if istable(gyro_data) || isa(gyro_data, 'timetable')
+    gyro_data = table2array(gyro_data);
+    fprintf('[velocity_to_angle] table/timetable → double diziye çevrildi.\n');
+end
+if ~isa(gyro_data, 'double') && ~isa(gyro_data, 'single')
+    gyro_data = double(gyro_data);
+    fprintf('[velocity_to_angle] Veri tipi double''a çevrildi.\n');
+end
+
 % ---- Giriş doğrulama ----
 validateattributes(gyro_data, {'double','single'}, {'2d','nonempty'}, ...
                    'velocity_to_angle', 'gyro_data');

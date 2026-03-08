@@ -115,12 +115,15 @@ header {
   border: 1px solid var(--border);
   border-radius: 12px; padding: 5px;
   width: fit-content; margin-bottom: 22px;
+  max-width: calc(100vw - 52px);
+  overflow-x: auto;
 }
 .tab-btn {
   font-family: var(--sans); font-size: 0.88rem; font-weight: 600;
   padding: 9px 24px; border: 1px solid transparent;
   border-radius: 8px; cursor: pointer;
   transition: all 0.2s; background: transparent; color: var(--text-dim);
+  white-space: nowrap; flex-shrink: 0;
 }
 .tab-btn.active {
   background: linear-gradient(135deg,rgba(90,171,255,0.18),rgba(90,171,255,0.06));
@@ -555,6 +558,7 @@ canvas {
    JİROSKOP SEKMESİ ÖZEL STİLLER
 ══════════════════════════════════════════ */
 .gyro-canvas { height: 200px; }
+.freq-resp-canvas { height: 110px; width: 100%; display: block; border-radius: 6px; margin-top: 10px; }
 
 .gyro-info-box {
   background: var(--card);
@@ -673,6 +677,7 @@ canvas {
             <div class="filter-tab active" onclick="switchFilter(this,'bw','p')">Butterworth</div>
             <div class="filter-tab" onclick="switchFilter(this,'notch','p')">Notch</div>
             <div class="filter-tab" onclick="switchFilter(this,'ma','p')">Ort. Alma</div>
+            <div class="filter-tab" onclick="switchFilter(this,'wt','p')">Wavelet</div>
           </div>
 
           <div id="p-bw" class="filter-section active">
@@ -707,10 +712,27 @@ canvas {
             </div>
           </div>
 
+          <div id="p-wt" class="filter-section">
+            <div class="form-group">
+              <div class="form-label">Ayrışım Seviyesi<span class="val"><span id="p-wt-level-val">4</span></span></div>
+              <input type="range" id="p-wt-level" min="1" max="8" value="4" oninput="document.getElementById('p-wt-level-val').textContent=this.value">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Eşik Çarpanı<span class="val"><span id="p-wt-thr-val">1.0</span></span></div>
+              <input type="range" class="orange" id="p-wt-thr" min="0.1" max="3" step="0.1" value="1.0" oninput="document.getElementById('p-wt-thr-val').textContent=parseFloat(this.value).toFixed(1)">
+            </div>
+          </div>
+
           <button class="btn btn-primary" style="margin-top:14px" onclick="applyFilter('process')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             Filtreyi Uygula
           </button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Filtre Frekans Yanıtı</div>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:4px">Filtre uygulandıktan sonra görünür. Yeşil = geçen, kesik = engellenen bant.</p>
+          <canvas id="p-freq-resp-canvas" class="freq-resp-canvas"></canvas>
         </div>
 
         <div class="panel">
@@ -841,6 +863,7 @@ canvas {
             <div class="filter-tab" onclick="switchFilter(this,'notch','s')">Notch</div>
             <div class="filter-tab" onclick="switchFilter(this,'ma','s')">MA</div>
             <div class="filter-tab" onclick="switchFilter(this,'chain','s')">Zincir</div>
+            <div class="filter-tab" onclick="switchFilter(this,'wt','s')">Wavelet</div>
           </div>
 
           <div id="s-bw" class="filter-section active">
@@ -883,6 +906,17 @@ canvas {
             </div>
           </div>
 
+          <div id="s-wt" class="filter-section">
+            <div class="form-group">
+              <div class="form-label">Ayrışım Seviyesi<span class="val"><span id="s-wt-level-val">4</span></span></div>
+              <input type="range" id="s-wt-level" min="1" max="8" value="4" oninput="document.getElementById('s-wt-level-val').textContent=this.value">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <div class="form-label">Eşik Çarpanı<span class="val"><span id="s-wt-thr-val">1.0</span></span></div>
+              <input type="range" class="orange" id="s-wt-thr" min="0.1" max="3" step="0.1" value="1.0" oninput="document.getElementById('s-wt-thr-val').textContent=parseFloat(this.value).toFixed(1)">
+            </div>
+          </div>
+
           <button class="btn btn-success" style="margin-top:12px" onclick="applyFilter('synthetic')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             Filtreyi Uygula
@@ -900,6 +934,12 @@ canvas {
             <div class="metric-value snr-val" id="s-ref-snr">—</div>
             <div class="metric-unit">dB · filtreden sonra</div>
           </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Filtre Frekans Yanıtı</div>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:4px">Filtre uygulandıktan sonra görünür.</p>
+          <canvas id="s-freq-resp-canvas" class="freq-resp-canvas"></canvas>
         </div>
 
       </div><!-- /sidebar -->
@@ -1055,10 +1095,16 @@ canvas {
             </div>
           </div>
 
-          <button class="btn btn-primary" style="margin-top:14px" onclick="runGyroAnalysis()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            Açıya Çevir
-          </button>
+          <div class="btn-row" style="margin-top:14px">
+            <button class="btn btn-primary" onclick="runGyroAnalysis()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Açıya Çevir
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="runGyroSelfTest()" title="cumtrapz doğrulama testi">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Ototest
+            </button>
+          </div>
         </div>
 
         <!-- Drift Düzeltme -->
@@ -1425,9 +1471,9 @@ function snrCalc(filtered,ref){
 function computeMetrics(signal,ref,fs,prefix){
   const r=rms(signal), mf=medianFreq(signal,fs);
   const s=ref?snrCalc(signal,ref):null;
-  animateValue(`${prefix}-rms`,r.toFixed(4));
-  animateValue(`${prefix}-mf`,mf.toFixed(1));
-  animateValue(`${prefix}-snr`,s!==null&&isFinite(s)?s.toFixed(2):'—');
+  animateValue(`${prefix}-rms`, isFinite(r)  ? r.toFixed(4)  : '—');
+  animateValue(`${prefix}-mf`,  isFinite(mf) ? mf.toFixed(1) : '—');
+  animateValue(`${prefix}-snr`, s!==null&&isFinite(s) ? s.toFixed(2) : '—');
   return {rms:r,mf,snr:s};
 }
 
@@ -1510,8 +1556,8 @@ function applyFilter(tab){
 
   // Log: filtre başlıyor
   if(tab==='synthetic'){
-    const names={bw:'Butterworth Bandpass',notch:'Notch',ma:'Hareketli Ortalama',chain:'Zincir (BP+Notch)'};
-    addLog(`Filtre başlatılıyor → ${lv(names[s.filterType],'blue')}`, 'step');
+    const names={bw:'Butterworth Bandpass',notch:'Notch',ma:'Hareketli Ortalama',chain:'Zincir (BP+Notch)',wt:'Haar Wavelet Soft-Threshold'};
+    addLog(`Filtre başlatılıyor → ${lv(names[s.filterType]||s.filterType,'blue')}`, 'step');
     addLog(`Sinyal uzunluğu: ${lv(s.raw.length)} örnek  |  Fs: ${lv(s.fs+' Hz','blue')}`, 'info');
   }
 
@@ -1540,6 +1586,11 @@ function applyFilter(tab){
         let tmp=butterworthBandpass(raw,fs,20,450);
         if(tab==='synthetic') addLog('Zincir ② Notch (50 Hz, Q=35) uygulanıyor…', 'step');
         filtered=notchFilter(tmp,fs,50,35);
+      }else if(ft==='wt'){
+        const lvl=parseInt(document.getElementById(`${prefix}-wt-level`)?.value||4);
+        const thr=parseFloat(document.getElementById(`${prefix}-wt-thr`)?.value||1.0);
+        if(tab==='synthetic') addLog(`Haar Wavelet: seviye=${lv(lvl)}  eşik çarpanı=${lv(thr,'orange')}  soft-thresholding`, 'info');
+        filtered=haarWaveletDenoise(raw,lvl,thr);
       }
 
       const elapsed=(performance.now()-t0).toFixed(1);
@@ -1547,6 +1598,31 @@ function applyFilter(tab){
       setStatus(prefix,'Filtre uygulandı ✓',true);
       toast('Filtre uygulandı','success');
       updateMetrics(prefix);
+
+      // Frekans yanıt grafiğini güncelle
+      {
+        let respFn = null;
+        if(ft==='bw'){
+          const low=parseInt(document.getElementById(`${prefix}-low`)?.value||20);
+          const high=parseInt(document.getElementById(`${prefix}-high`)?.value||450);
+          respFn = sig => butterworthBandpass(sig,s.fs,low,high);
+        }else if(ft==='notch'){
+          const f0=parseInt(document.getElementById(`${prefix}-notch-freq`)?.value||50);
+          const Q=parseInt(document.getElementById(`${prefix}-q`)?.value||35);
+          respFn = sig => notchFilter(sig,s.fs,f0,Q);
+        }else if(ft==='ma'){
+          const win=parseInt(document.getElementById(`${prefix}-win`)?.value||10);
+          respFn = sig => movingAverage(sig,win);
+        }else if(ft==='chain'){
+          respFn = sig => notchFilter(butterworthBandpass(sig,s.fs,20,450),s.fs,50,35);
+        }else if(ft==='wt'){
+          const lvl=parseInt(document.getElementById(`${prefix}-wt-level`)?.value||4);
+          const thr=parseFloat(document.getElementById(`${prefix}-wt-thr`)?.value||1.0);
+          respFn = sig => haarWaveletDenoise(sig,lvl,thr);
+        }
+        resizeCanvas(`${prefix}-freq-resp-canvas`);
+        drawFreqResponse(`${prefix}-freq-resp-canvas`, respFn, s.fs);
+      }
 
       // SNR hesabı ve log
       if(prefix==='s'&&s.ref){
@@ -1952,6 +2028,150 @@ function exportJSON(){
 }
 
 // ════════════════════════════════════════════════
+//  HAAR WAVELET SOFT-THRESHOLDING
+// ════════════════════════════════════════════════
+
+function haarDWT(signal) {
+  let N = 1; while (N < signal.length) N <<= 1;
+  const x = new Float64Array(N);
+  for (let i = 0; i < signal.length; i++) x[i] = signal[i];
+  let len = N;
+  while (len > 1) {
+    const half = len >> 1;
+    const tmp = new Float64Array(len);
+    for (let i = 0; i < half; i++) {
+      tmp[i]        = (x[2*i] + x[2*i+1]) * 0.7071067811865476;  // / √2
+      tmp[half + i] = (x[2*i] - x[2*i+1]) * 0.7071067811865476;
+    }
+    for (let i = 0; i < len; i++) x[i] = tmp[i];
+    len = half;
+  }
+  return x;
+}
+
+function haarIDWT(coeffs) {
+  const x = new Float64Array(coeffs);
+  let len = 2;
+  while (len <= x.length) {
+    const half = len >> 1;
+    const tmp = new Float64Array(len);
+    for (let i = 0; i < half; i++) {
+      tmp[2*i]   = (x[i] + x[half+i]) * 0.7071067811865476;
+      tmp[2*i+1] = (x[i] - x[half+i]) * 0.7071067811865476;
+    }
+    for (let i = 0; i < len; i++) x[i] = tmp[i];
+    len <<= 1;
+  }
+  return x;
+}
+
+function haarWaveletDenoise(signal, levels, threshMult) {
+  const n = signal.length;
+  const coeffs = haarDWT(signal);
+  const N = coeffs.length;
+  // Noise estimate from finest detail band (MAD / 0.6745)
+  const fine = Array.from(coeffs.slice(N >> 1), Math.abs).sort((a,b)=>a-b);
+  const mad   = fine[Math.floor(fine.length / 2)];
+  const sigma = mad / 0.6745;
+  const thr   = threshMult * sigma * Math.sqrt(2 * Math.log(Math.max(n, 2)));
+  // Soft-threshold all detail bands (keep first 'levels' approximation bands intact)
+  const keepLen = N >> levels;
+  for (let i = keepLen; i < N; i++) {
+    const v = coeffs[i];
+    coeffs[i] = Math.sign(v) * Math.max(0, Math.abs(v) - thr);
+  }
+  const rec = haarIDWT(coeffs);
+  return new Float64Array(n).map((_, i) => rec[i]);
+}
+
+// ════════════════════════════════════════════════
+//  FİLTRE FREKANS YANI (DOĞRULAMA)
+// ════════════════════════════════════════════════
+
+// Frekans yanıtını impuls cevabından hesaplar
+function computeFreqResponse(filterFn, fs, nPoints) {
+  nPoints = nPoints || 1024;
+  const impulse = new Float64Array(nPoints);
+  impulse[0] = 1.0;
+  const h = filterFn(impulse);
+  const re = new Float64Array(nPoints);
+  const im = new Float64Array(nPoints);
+  for (let i = 0; i < nPoints; i++) re[i] = h[i] || 0;
+  fft(re, im);
+  const freqs = new Float64Array(nPoints / 2);
+  const mag   = new Float64Array(nPoints / 2);
+  for (let i = 0; i < nPoints / 2; i++) {
+    freqs[i] = i * fs / nPoints;
+    const a  = Math.sqrt(re[i]*re[i] + im[i]*im[i]);
+    mag[i]   = 20 * Math.log10(Math.max(a, 1e-12));
+  }
+  return { freqs, mag };
+}
+
+function drawFreqResponse(canvasId, filterFn, fs) {
+  const c = document.getElementById(canvasId); if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.clientWidth, H = c.clientHeight;
+  if (!W || !H) return;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H);
+
+  const pad = { l: 44, r: 8, t: 8, b: 28 };
+  const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+  if (!filterFn) {
+    ctx.fillStyle = 'rgba(74,96,122,0.4)'; ctx.font = '10px JetBrains Mono,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Filtre uygulandıktan sonra', W/2, H/2 - 6);
+    ctx.fillText('yanıt burada görünür', W/2, H/2 + 8);
+    return;
+  }
+
+  const { freqs, mag } = computeFreqResponse(filterFn, fs, 1024);
+  const nyq = fs / 2;
+  const dBmin = -80, dBmax = 6;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+  [-60,-40,-20,0].forEach(db => {
+    const y = pad.t + ph * (1 - (db - dBmin) / (dBmax - dBmin));
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+    ctx.fillStyle = 'rgba(128,153,187,0.5)'; ctx.font = '8px JetBrains Mono,monospace'; ctx.textAlign = 'right';
+    ctx.fillText(db + 'dB', pad.l - 3, y + 3);
+  });
+
+  // -3 dB line
+  const y3 = pad.t + ph * (1 - (-3 - dBmin) / (dBmax - dBmin));
+  ctx.strokeStyle = 'rgba(255,208,96,0.2)'; ctx.setLineDash([3,5]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, y3); ctx.lineTo(pad.l + pw, y3); ctx.stroke(); ctx.setLineDash([]);
+
+  // X axis labels
+  ctx.fillStyle = 'rgba(128,153,187,0.55)'; ctx.font = '8px JetBrains Mono,monospace'; ctx.textAlign = 'center';
+  [0, 100, 200, 300, 400, 500].filter(f => f <= nyq).forEach(f => {
+    const x = pad.l + pw * f / nyq;
+    ctx.fillText(f, x, H - 2);
+  });
+
+  // Magnitude curve
+  const grad = ctx.createLinearGradient(pad.l, 0, pad.l + pw, 0);
+  grad.addColorStop(0, '#3dffa0'); grad.addColorStop(1, '#5aabff');
+  ctx.strokeStyle = grad; ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#3dffa0'; ctx.shadowBlur = 3;
+  ctx.beginPath(); let moved = false;
+  for (let i = 0; i < freqs.length; i++) {
+    if (freqs[i] > nyq) break;
+    const x = pad.l + pw * freqs[i] / nyq;
+    const y = pad.t + ph * (1 - Math.max(dBmin, Math.min(dBmax, mag[i]) - dBmin) / (dBmax - dBmin));
+    const yc = pad.t + ph * (1 - (Math.max(dBmin, Math.min(dBmax, mag[i])) - dBmin) / (dBmax - dBmin));
+    if (!moved) { ctx.moveTo(x, yc); moved = true; } else ctx.lineTo(x, yc);
+  }
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Title
+  ctx.fillStyle = 'rgba(61,255,160,0.7)'; ctx.font = 'bold 9px Inter,sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('Filtre Frekans Yanıtı (dB)', pad.l + 3, pad.t + 10);
+}
+
+// ════════════════════════════════════════════════
 //  GYROSCOPE ANALYSIS
 // ════════════════════════════════════════════════
 const gyroState = {
@@ -2106,9 +2326,9 @@ function runGyroAnalysis() {
   const driftRemoved = Math.abs(angleRaw[N - 1] - angle[N - 1]);
   const angleRange  = Math.max(...angle) - Math.min(...angle);
 
-  animateValue('g-total-angle',   totalAngle.toFixed(2)   + '°');
-  animateValue('g-drift-removed', driftRemoved.toFixed(2) + '°');
-  animateValue('g-angle-range',   angleRange.toFixed(2)   + '°');
+  animateValue('g-total-angle',   isFinite(totalAngle)   ? totalAngle.toFixed(2)   + '°' : '—');
+  animateValue('g-drift-removed', isFinite(driftRemoved) ? driftRemoved.toFixed(2) + '°' : '—');
+  animateValue('g-angle-range',   isFinite(angleRange)   ? angleRange.toFixed(2)   + '°' : '—');
   animateValue('g-fs-dur',        `${fs} Hz / ${(N/fs).toFixed(1)} s`);
 
   addGyroLog(`✓ Tamamlandı — ${lv(N+' örnek')}  işlem süresi: ${lv(elapsed+' ms')}`, 'success');
@@ -2253,6 +2473,53 @@ function toggleGyroLog() {
   document.getElementById('gyro-log-toggle').classList.toggle('open', gyroLogOpen);
 }
 
+// ─── Gyro self-test ───────────────────────────────────────────────────
+function runGyroSelfTest() {
+  addGyroLog('━━━ Cumtrapz Ototest Başlatıldı ━━━', 'step');
+  // Test 1: sabit hız → doğrusal açı
+  const fs1 = 200, dur = 5, vel = 30;
+  const expected = vel * dur;   // 150°
+  const omega1 = new Float64Array(fs1 * dur).fill(vel);
+  const { angle: a1 } = velocityToAngle(omega1, fs1, 0);  // HPF kapalı
+  const got1  = a1[a1.length - 1];
+  const err1  = Math.abs(got1 - expected) / expected * 100;
+  const ok1   = err1 < 0.01;
+  addGyroLog(
+    `Test 1 — Sabit hız (${vel}°/s × ${dur}s): beklenen=${lv(expected+'°','green')} hesaplanan=${lv(got1.toFixed(4)+'°', ok1?'green':'orange')} hata=%${lv(err1.toFixed(5), ok1?'green':'orange')}`,
+    ok1 ? 'success' : 'warn'
+  );
+
+  // Test 2: sıfır hız → sıfır açı
+  const omega2 = new Float64Array(fs1 * dur).fill(0);
+  const { angle: a2 } = velocityToAngle(omega2, fs1, 0);
+  const got2 = Math.max(...a2.map(Math.abs));
+  const ok2  = got2 < 1e-10;
+  addGyroLog(
+    `Test 2 — Sıfır hız: maks açı=${lv(got2.toExponential(2)+'°', ok2?'green':'orange')} → ${ok2?'✓ Doğru':'⚠ Hata'}`,
+    ok2 ? 'success' : 'warn'
+  );
+
+  // Test 3: sinüs hızı → kümülatif integral
+  const fs3 = 100, T = 2, f0 = 1;
+  const N3 = fs3 * T;
+  const omega3 = new Float64Array(N3);
+  for (let i = 0; i < N3; i++) omega3[i] = Math.cos(2 * Math.PI * f0 * i / fs3);  // cos(2πt) integral = sin(2πt)/(2π)
+  const { angle: a3 } = velocityToAngle(omega3, fs3, 0);
+  const got3 = a3[N3 - 1];  // sin(2π*T)/(2π) ≈ 0
+  const ok3  = Math.abs(got3) < 0.5;
+  addGyroLog(
+    `Test 3 — Sinüs hızı son değer (≈0 beklenir): ${lv(got3.toFixed(4)+'°', ok3?'green':'orange')} → ${ok3?'✓ Doğru':'⚠ Küçük sapma (normal)'}`,
+    ok3 ? 'success' : 'info'
+  );
+
+  const allOk = ok1 && ok2;
+  addGyroLog(
+    allOk ? '✓ Tüm testler geçti — cumtrapz implementasyonu doğru' : '⚠ Bazı testler beklenenden saptı',
+    allOk ? 'success' : 'warn'
+  );
+  toast(allOk ? 'Ototest başarılı ✓' : 'Ototest uyarı — log\'u kontrol et', allOk ? 'success' : 'info');
+}
+
 // ─── Export ───────────────────────────────────────────────────────────
 function exportGyroCSV() {
   if (!gyroState.rawVelocity) { toast('Önce analiz yapın!', 'error'); return; }
@@ -2274,9 +2541,13 @@ function exportGyroCSV() {
 //  INIT
 // ════════════════════════════════════════════════
 window.addEventListener('load',()=>{
-  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas','g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
+  ['p-signal-canvas','p-psd-canvas','p-freq-resp-canvas',
+   's-signal-canvas','s-psd-canvas','s-freq-resp-canvas',
+   'g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
   setupCanvasInteraction('p-signal-canvas','p-tooltip',()=>state.process);
   setupCanvasInteraction('s-signal-canvas','s-tooltip',()=>state.synthetic);
+  drawFreqResponse('p-freq-resp-canvas', null, 2000);
+  drawFreqResponse('s-freq-resp-canvas', null, 2000);
   drawGyroSignal('g-vel-canvas',   null, 'Açısal Hız', '#5aabff', '°/s', 200);
   drawGyroSignal('g-angle-canvas', null, 'Açı',        '#a78bfa', '°',   200);
 
@@ -2287,8 +2558,8 @@ window.addEventListener('load',()=>{
     gdz.addEventListener('dragleave', () => gdz.classList.remove('drag-over'));
     gdz.addEventListener('drop', e => {
       e.preventDefault(); gdz.classList.remove('drag-over');
-      const fi = document.getElementById('gyro-file-input');
-      if (e.dataTransfer.files[0] && fi) { fi.files = e.dataTransfer.files; handleGyroFile(fi); }
+      const dropped = e.dataTransfer.files[0];
+      if (dropped) handleGyroFile({ files: [dropped] });
     });
   }
 
@@ -2305,7 +2576,9 @@ window.addEventListener('load',()=>{
 });
 
 window.addEventListener('resize',()=>{
-  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas','g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
+  ['p-signal-canvas','p-psd-canvas','p-freq-resp-canvas',
+   's-signal-canvas','s-psd-canvas','s-freq-resp-canvas',
+   'g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
   redrawAll();
   drawGyroSignal('g-vel-canvas',   gyroState.rawVelocity, 'Açısal Hız', '#5aabff', '°/s', gyroState.fs);
   drawGyroSignal('g-angle-canvas', gyroState.angle,       'Açı',        '#a78bfa', '°',   gyroState.fs, gyroState.angleRaw);
