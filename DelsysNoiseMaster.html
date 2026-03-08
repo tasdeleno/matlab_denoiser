@@ -1229,6 +1229,7 @@ const state = {
 };
 
 let logOpen = true;
+let gyroLogOpen = true;
 
 // ════════════════════════════════════════════════
 //  LOG SİSTEMİ
@@ -1282,13 +1283,17 @@ function toggleLog() {
 // ════════════════════════════════════════════════
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach((b,i)=>{
-    b.classList.toggle('active', (name==='process'&&i===0)||(name==='synthetic'&&i===1));
+    b.classList.toggle('active', (name==='process'&&i===0)||(name==='synthetic'&&i===1)||(name==='gyro'&&i===2));
   });
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   setTimeout(()=>{
-    ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas'].forEach(resizeCanvas);
+    ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas','g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
     redrawAll();
+    if(name==='gyro') {
+      drawGyroSignal('g-vel-canvas',   gyroState.rawVelocity, 'Açısal Hız', '#5aabff', '°/s', gyroState.fs);
+      drawGyroSignal('g-angle-canvas', gyroState.angle, 'Açı', '#a78bfa', '°', gyroState.fs, gyroState.angleRaw);
+    }
   }, 50);
 }
 
@@ -1947,12 +1952,345 @@ function exportJSON(){
 }
 
 // ════════════════════════════════════════════════
+//  GYROSCOPE ANALYSIS
+// ════════════════════════════════════════════════
+const gyroState = {
+  rawVelocity: null,   // input angular velocity (deg/s)
+  angleRaw:    null,   // integrated angle before drift correction
+  angle:       null,   // drift-corrected angle
+  fs:          200,
+  unit:        'deg',
+  duration:    10
+};
+
+// ─── High-pass Butterworth (2nd order, zero-phase) ────────────────────────
+function butterworthHPF(signal, fs, fc) {
+  fc = Math.max(0.001, Math.min(fc, fs / 2 * 0.99));
+  const wc = Math.tan(Math.PI * fc / fs);
+  const k  = 1 / (1 + Math.SQRT2 * wc + wc * wc);
+  const b  = [k, -2 * k, k];
+  const a  = [1, 2 * k * (wc * wc - 1), k * (1 - Math.SQRT2 * wc + wc * wc)];
+  let fwd = iirFilter(signal, b, a);
+  let rev = iirFilter(Array.from(fwd).reverse(), b, a);
+  return new Float64Array(Array.from(rev).reverse());
+}
+
+// ─── Cumulative trapezoidal integration ──────────────────────────────────
+function cumtrapzGyro(signal, dt) {
+  const n   = signal.length;
+  const out = new Float64Array(n);
+  for (let i = 1; i < n; i++)
+    out[i] = out[i - 1] + 0.5 * (signal[i - 1] + signal[i]) * dt;
+  return out;
+}
+
+// ─── Angular velocity → angle ──────────────────────────────────────────
+function velocityToAngle(omega, fs, hpfHz) {
+  const angleRaw = cumtrapzGyro(omega, 1 / fs);
+  const angle = (hpfHz > 0 && hpfHz < fs / 2)
+    ? butterworthHPF(angleRaw, fs, hpfHz)
+    : new Float64Array(angleRaw);
+  return { angleRaw, angle };
+}
+
+// ─── Simulated gyroscope signal ────────────────────────────────────────
+function generateSimulatedGyro(dur, fs, rotSpeed, oscAmp, noiseLevel, drift) {
+  const N    = Math.round(dur * fs);
+  const dt   = 1 / fs;
+  const rand = seededRandom(Date.now() & 0xFFFFFF);
+  const omega = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const t = i * dt;
+    omega[i] = rotSpeed
+      + oscAmp * Math.sin(2 * Math.PI * 0.5 * t)
+      + drift  * t
+      + noiseLevel * boxMuller(rand);
+  }
+  return omega;
+}
+
+// ─── Source selector ──────────────────────────────────────────────────
+function onGyroSourceChange() {
+  const src = document.getElementById('gyro-source').value;
+  document.getElementById('gyro-sim-params').style.display = src === 'sim' ? '' : 'none';
+  document.getElementById('gyro-csv-params').style.display = src === 'csv' ? '' : 'none';
+}
+
+// ─── CSV loader ───────────────────────────────────────────────────────
+function handleGyroFile(input) {
+  if (!input.files[0]) return;
+  const file   = input.files[0];
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const lines = e.target.result.trim().split('\n').filter(l => l.trim());
+      let start = isNaN(parseFloat(lines[0].split(',')[0])) ? 1 : 0;
+      const data = [];
+      for (let i = start; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(Number);
+        if (!isNaN(cols[0])) data.push(cols);
+      }
+      if (data.length < 10) { toast('Geçersiz CSV!', 'error'); return; }
+      const col0   = data.map(r => r[0]);
+      const isTime = col0.every((v, i) => i === 0 || v > col0[i - 1]);
+      const omega  = isTime ? data.map(r => r[1] || 0) : data.map(r => r[0]);
+      const fs     = parseInt(document.getElementById('gyro-csv-fs').value) || 200;
+      gyroState.rawVelocity = new Float64Array(omega);
+      gyroState.fs          = fs;
+      const info = document.getElementById('gyro-file-info');
+      info.textContent = `✓ ${file.name}  ·  ${omega.length} örnek  ·  ${fs} Hz`;
+      info.style.display = 'block';
+      addGyroLog(`CSV yüklendi: ${file.name} | ${omega.length} örnek | Fs=${fs} Hz`, 'success');
+      toast('Jiroskop CSV yüklendi', 'success');
+    } catch (err) {
+      toast('CSV hatası: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ─── Run analysis ─────────────────────────────────────────────────────
+function runGyroAnalysis() {
+  const src = document.getElementById('gyro-source').value;
+  let omega, fs;
+
+  if (src === 'sim') {
+    const dur      = parseFloat(document.getElementById('gyro-dur').value)   || 10;
+    fs             = parseInt(document.getElementById('gyro-fs').value)       || 200;
+    const rotSpeed = parseFloat(document.getElementById('gyro-rot').value)   || 30;
+    const oscAmp   = parseFloat(document.getElementById('gyro-osc').value)   || 15;
+    const noise    = parseFloat(document.getElementById('gyro-noise').value) || 2;
+    const drift    = parseFloat(document.getElementById('gyro-drift').value) || 0.5;
+    addGyroLog('━━━ Simülasyon Başlatıldı ━━━', 'step');
+    addGyroLog(`Süre=${lv(dur+'s')}  Fs=${lv(fs+'Hz','blue')}  Dönüş=${lv(rotSpeed+'°/s','orange')}  Salınım=${lv(oscAmp+'°/s')}`, 'info');
+    addGyroLog(`Gürültü=${lv(noise+'°/s','orange')}  Lineer Drift=${lv(drift+'°/s²','yellow')}`, 'info');
+    omega = generateSimulatedGyro(dur, fs, rotSpeed, oscAmp, noise, drift);
+    gyroState.rawVelocity = omega;
+    gyroState.fs          = fs;
+    gyroState.duration    = dur;
+  } else {
+    if (!gyroState.rawVelocity) { toast('Önce CSV yükleyin!', 'error'); return; }
+    omega = gyroState.rawVelocity;
+    fs    = gyroState.fs;
+    addGyroLog('━━━ CSV Verisi Analiz Ediliyor ━━━', 'step');
+    addGyroLog(`${omega.length} örnek | Fs=${lv(fs+'Hz','blue')}`, 'info');
+  }
+
+  const hpfHz = parseFloat(document.getElementById('gyro-hpf').value) || 0.05;
+  const unit  = document.getElementById('gyro-unit').value;
+
+  addGyroLog(`① cumtrapz integrasyon (dt=${lv((1/fs).toFixed(5)+'s')})`, 'step');
+  addGyroLog(`② Drift HPF: fc=${lv(hpfHz+' Hz','green')}  Butterworth 2. mertebe, sıfır-faz`, 'step');
+
+  // Unit conversion
+  let omegaDeg;
+  if (unit === 'rads') {
+    omegaDeg = new Float64Array(omega.length);
+    for (let i = 0; i < omega.length; i++) omegaDeg[i] = omega[i] * (180 / Math.PI);
+    addGyroLog('Birim dönüşümü: rad/s → °/s', 'info');
+  } else {
+    omegaDeg = omega;
+  }
+
+  const t0 = performance.now();
+  const { angleRaw, angle } = velocityToAngle(omegaDeg, fs, hpfHz);
+  const elapsed = (performance.now() - t0).toFixed(1);
+
+  gyroState.angle    = angle;
+  gyroState.angleRaw = angleRaw;
+  gyroState.unit     = unit;
+
+  // Metrics
+  const N           = omega.length;
+  const totalAngle  = angle[N - 1] - angle[0];
+  const driftRemoved = Math.abs(angleRaw[N - 1] - angle[N - 1]);
+  const angleRange  = Math.max(...angle) - Math.min(...angle);
+
+  animateValue('g-total-angle',   totalAngle.toFixed(2)   + '°');
+  animateValue('g-drift-removed', driftRemoved.toFixed(2) + '°');
+  animateValue('g-angle-range',   angleRange.toFixed(2)   + '°');
+  animateValue('g-fs-dur',        `${fs} Hz / ${(N/fs).toFixed(1)} s`);
+
+  addGyroLog(`✓ Tamamlandı — ${lv(N+' örnek')}  işlem süresi: ${lv(elapsed+' ms')}`, 'success');
+  addGyroLog(
+    `Toplam açı: ${lv(totalAngle.toFixed(2)+'°','purple')}  |  ` +
+    `Drift giderildi: ${lv(driftRemoved.toFixed(2)+'°','yellow')}  |  ` +
+    `Aralık: ${lv(angleRange.toFixed(2)+'°','green')}`,
+    'info'
+  );
+
+  // Draw
+  ['g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
+  drawGyroSignal('g-vel-canvas',   omegaDeg, 'Açısal Hız', '#5aabff', '°/s', fs);
+  drawGyroSignal('g-angle-canvas', angle,    'Açı',        '#a78bfa', '°',   fs, angleRaw);
+  toast('Açıya çevrildi', 'success');
+}
+
+// ─── Canvas drawing ───────────────────────────────────────────────────
+function drawGyroSignal(canvasId, signal, label, color, yUnit, fs, signal2) {
+  const c = document.getElementById(canvasId); if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.clientWidth, H = c.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H);
+
+  const pad = { l: 68, r: 18, t: 18, b: 40 };
+  const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+  if (!signal || !signal.length) {
+    ctx.fillStyle = 'rgba(74,96,122,0.4)';
+    ctx.font = '13px JetBrains Mono,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Veri bekleniyor…', W / 2, H / 2);
+    return;
+  }
+
+  const n = signal.length;
+  let yMin = Infinity, yMax = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (signal[i] < yMin) yMin = signal[i];
+    if (signal[i] > yMax) yMax = signal[i];
+    if (signal2) {
+      if (signal2[i] < yMin) yMin = signal2[i];
+      if (signal2[i] > yMax) yMax = signal2[i];
+    }
+  }
+  const yRange = yMax - yMin || 1, yPad = yRange * 0.12;
+  yMin -= yPad; yMax += yPad;
+
+  // Grid
+  const nX = 6, nY = 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= nX; i++) { const x = pad.l + pw*i/nX; ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ph); ctx.stroke(); }
+  for (let i = 0; i <= nY; i++) { const y = pad.t + ph*i/nY; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+pw,y); ctx.stroke(); }
+
+  // Y labels
+  ctx.fillStyle = 'rgba(128,153,187,0.8)'; ctx.font = '10px JetBrains Mono,monospace'; ctx.textAlign = 'right';
+  for (let i = 0; i <= nY; i++) {
+    const v = yMax - (yMax - yMin) * i / nY;
+    ctx.fillText(v.toFixed(1), pad.l - 6, pad.t + ph * i / nY + 4);
+  }
+
+  // X labels
+  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(128,153,187,0.7)'; ctx.font = '10px JetBrains Mono,monospace';
+  for (let i = 0; i <= nX; i++) {
+    const idx = Math.round(n * i / nX);
+    ctx.fillText((idx / fs).toFixed(2) + 's', pad.l + pw * i / nX, pad.t + ph + 22);
+  }
+
+  // Axis titles
+  ctx.fillStyle = 'rgba(90,171,255,0.45)'; ctx.font = '10px JetBrains Mono,monospace'; ctx.textAlign = 'center';
+  ctx.fillText('Zaman (s)', pad.l + pw / 2, H - 4);
+  ctx.save(); ctx.translate(13, pad.t + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText(yUnit, 0, 0); ctx.restore();
+
+  // Zero line
+  if (yMin < 0 && yMax > 0) {
+    const zy = pad.t + ph * (1 - (0 - yMin) / (yMax - yMin));
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, zy); ctx.lineTo(pad.l + pw, zy); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // Raw angle (dim) if provided
+  if (signal2) {
+    ctx.strokeStyle = 'rgba(255,208,96,0.35)'; ctx.lineWidth = 1; ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    const step2 = Math.max(1, Math.floor(n / pw));
+    for (let i = 0; i < n; i += step2) {
+      const px = pad.l + pw * i / n;
+      const py = pad.t + ph * (1 - (signal2[i] - yMin) / (yMax - yMin));
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+
+  // Main signal
+  ctx.strokeStyle = color; ctx.lineWidth = 1.8;
+  ctx.shadowColor = color; ctx.shadowBlur = 5; ctx.globalAlpha = 0.95;
+  ctx.beginPath();
+  const step = Math.max(1, Math.floor(n / pw));
+  for (let i = 0; i < n; i += step) {
+    const px = pad.l + pw * i / n;
+    const py = pad.t + ph * (1 - (signal[i] - yMin) / (yMax - yMin));
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+
+  // Legend
+  ctx.fillStyle = color; ctx.font = 'bold 11px Inter,sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(label, pad.l + 6, pad.t + 16);
+  if (signal2) {
+    ctx.fillStyle = 'rgba(255,208,96,0.55)'; ctx.font = '10px Inter,sans-serif';
+    ctx.fillText('Ham (drift)', pad.l + pw - 88, pad.t + 16);
+  }
+}
+
+// ─── Gyro log ─────────────────────────────────────────────────────────
+function addGyroLog(msg, type = 'info') {
+  const body  = document.getElementById('gyro-log-body');
+  const empty = document.getElementById('gyro-log-empty');
+  if (empty) empty.remove();
+  const time  = new Date().toTimeString().slice(0, 8);
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  entry.innerHTML =
+    `<span class="log-time">${time}</span>` +
+    `<span class="log-icon">${LOG_ICONS[type] || '·'}</span>` +
+    `<span class="log-msg">${msg}</span>`;
+  body.appendChild(entry);
+  body.scrollTop = body.scrollHeight;
+  document.getElementById('gyro-log-count').textContent = body.querySelectorAll('.log-entry').length;
+}
+
+function clearGyroLog() {
+  const body = document.getElementById('gyro-log-body');
+  body.innerHTML = '<div class="log-empty" id="gyro-log-empty">Log temizlendi.</div>';
+  document.getElementById('gyro-log-count').textContent = '0';
+}
+
+function toggleGyroLog() {
+  gyroLogOpen = !gyroLogOpen;
+  document.getElementById('gyro-log-body').style.display = gyroLogOpen ? '' : 'none';
+  document.getElementById('gyro-log-toggle').classList.toggle('open', gyroLogOpen);
+}
+
+// ─── Export ───────────────────────────────────────────────────────────
+function exportGyroCSV() {
+  if (!gyroState.rawVelocity) { toast('Önce analiz yapın!', 'error'); return; }
+  const fs    = gyroState.fs;
+  const omega = gyroState.rawVelocity;
+  const raw   = gyroState.angleRaw;
+  const angle = gyroState.angle;
+  let csv = 'Zaman_s,AcisalHiz_degs,Ham_Aci_deg,Duzeltilmis_Aci_deg\n';
+  for (let i = 0; i < omega.length; i++)
+    csv += `${(i/fs).toFixed(6)},${omega[i].toFixed(6)},${raw?raw[i].toFixed(6):''},${angle?angle[i].toFixed(6):''}\n`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'jiroskop_analiz.csv'; a.click();
+  toast('CSV indiriliyor…', 'success');
+  addGyroLog('CSV dışa aktarıldı: jiroskop_analiz.csv', 'success');
+}
+
+// ════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════
 window.addEventListener('load',()=>{
-  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas'].forEach(resizeCanvas);
+  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas','g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
   setupCanvasInteraction('p-signal-canvas','p-tooltip',()=>state.process);
   setupCanvasInteraction('s-signal-canvas','s-tooltip',()=>state.synthetic);
+  drawGyroSignal('g-vel-canvas',   null, 'Açısal Hız', '#5aabff', '°/s', 200);
+  drawGyroSignal('g-angle-canvas', null, 'Açı',        '#a78bfa', '°',   200);
+
+  // Gyro drop zone
+  const gdz = document.getElementById('gyro-drop-zone');
+  if (gdz) {
+    gdz.addEventListener('dragover', e => { e.preventDefault(); gdz.classList.add('drag-over'); });
+    gdz.addEventListener('dragleave', () => gdz.classList.remove('drag-over'));
+    gdz.addEventListener('drop', e => {
+      e.preventDefault(); gdz.classList.remove('drag-over');
+      const fi = document.getElementById('gyro-file-input');
+      if (e.dataTransfer.files[0] && fi) { fi.files = e.dataTransfer.files; handleGyroFile(fi); }
+    });
+  }
 
   // Log paneli default açık
   document.getElementById('log-toggle').classList.add('open');
@@ -1967,8 +2305,10 @@ window.addEventListener('load',()=>{
 });
 
 window.addEventListener('resize',()=>{
-  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas'].forEach(resizeCanvas);
+  ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas','g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
   redrawAll();
+  drawGyroSignal('g-vel-canvas',   gyroState.rawVelocity, 'Açısal Hız', '#5aabff', '°/s', gyroState.fs);
+  drawGyroSignal('g-angle-canvas', gyroState.angle,       'Açı',        '#a78bfa', '°',   gyroState.fs, gyroState.angleRaw);
 });
 </script>
 </body>
