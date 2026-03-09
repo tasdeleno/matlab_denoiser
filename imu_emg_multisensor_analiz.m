@@ -40,6 +40,14 @@ CF_ALPHA = 0.98;
 % Kişi kayıt başında nötr duruşta ise 0.5–1.0 s uygun.
 BASELINE_DUR = 0.5;  % [s]
 
+% ── Senkronizasyon parametreleri ─────────────────────────────────────
+% Delsys'te farklı Fs'li kanallar (IMU=148 Hz, EMG=1259 Hz) bağımsız
+% sayaçla kaydedilir. Bazı kanallar birkaç 100 ms geç başlayabilir.
+% İç boşluklar (kayıt kesilmesi) NaN veya uzun sıfır bloğu olarak gelir.
+SYNC_GAP_MAX_S   = 2.0;    % [s] Bu süreden kısa iç boşluklar interpolasyon ile doldurulur
+SYNC_ZERO_MIN_S  = 0.05;   % [s] Bu süreden uzun sıfır bloğu "boşluk" sayılır
+SYNC_ZERO_THRESH = 1e-9;   % Sıfır tespiti eşiği (ADC sıfır-dolgu)
+
 % ── EMG filtre parametreleri ──────────────────────────────────────────
 EMG_BP_LOW  = 20;    % Bandpass alt sınırı [Hz]
 EMG_BP_HIGH = 450;   % Bandpass üst sınırı [Hz]
@@ -196,6 +204,86 @@ end
 fprintf('\n');
 
 % ======================================================================
+%% 3.5. SENKRONIZASYON — Başlangıç Hizalama + İç Boşluk Doldurma
+% ======================================================================
+% SORUN: Delsys Data matrisinde her kanal kendi Fs'inde kaydedilir.
+%   • Sütun indeksi k, IMU için t = k/148.15 s, EMG için t = k/1259.26 s.
+%   • Bazı kanallar kayıt başında NaN döner (sensor geç hazır) →
+%     getRow() bunları 0'a çevirir → yanlış veri gibi görünür.
+%   • Kayıt ortasındaki dropout'lar NaN veya uzun-sıfır bloğu olarak gelir.
+%
+% ÇÖZÜM:
+%   1) Her kanalın "ilk geçerli" sütun indeksini bul → mutlak başlangıç zamanı.
+%   2) Global t=0 = tüm aktif kanalların en geç başlangıcı.
+%   3) İç NaN/sıfır bloklarını lineer interpolasyonla doldur (kısa boşluklar).
+%   4) Tüm IMU/EMG verileri global t=0'dan başlayarak çekilir.
+
+fprintf(' [SYNC] Kanal senkronizasyonu başlatılıyor...\n');
+
+% Her kanalın ilk geçerli örnek zamanını hesapla
+ch_tstart_s = zeros(N_ch, 1);   % Kanalın mutlak başlangıç zamanı [s]
+
+% Boşluk doldurulmuş veri kopyası (orijinal data_mat değişmez)
+data_sync = data_mat;
+
+for k = 1:N_ch
+    fs_k = fs_arr(k);
+    if fs_k <= 0, fs_k = 1; end
+
+    row_k = data_mat(k, :);   % 1×N_samp
+
+    % İlk ve son geçerli örnek: NaN olmayan VE sıfır bloğu olmayan
+    valid_mask = ~isnan(row_k) & (abs(row_k) > SYNC_ZERO_THRESH);
+    fv = find(valid_mask, 1, 'first');
+    lv = find(valid_mask, 1, 'last');
+
+    if isempty(fv) || isempty(lv)
+        ch_tstart_s(k) = 0;
+        continue
+    end
+
+    % Mutlak başlangıç zamanı (kayıt açıldığından itibaren [s])
+    ch_tstart_s(k) = (fv - 1) / fs_k;
+
+    % İlk–son geçerli aralıktaki iç boşlukları doldur
+    seg = double(row_k(fv:lv));
+    seg_filled = fill_gaps_1d(seg, fs_k, SYNC_GAP_MAX_S, ...
+                              SYNC_ZERO_THRESH, SYNC_ZERO_MIN_S);
+    data_sync(k, fv:lv) = seg_filled;
+end
+
+% Aktif kanallar: sadece eşleşen IMU/EMG kanallarını hesaba kat
+active_chs = [];
+for i = 1:N_IMU
+    if ~imu_idx(i).ok, continue; end
+    flds = {'accX','accY','accZ','gyrX','gyrY','gyrZ'};
+    for f = 1:numel(flds)
+        ci = imu_idx(i).(flds{f});
+        if ~isempty(ci), active_chs(end+1) = ci; end %#ok<AGROW>
+    end
+end
+for i = 1:N_EMG
+    if emg_idx(i) > 0, active_chs(end+1) = emg_idx(i); end %#ok<AGROW>
+end
+active_chs = unique(active_chs);
+
+if isempty(active_chs)
+    T_GLOBAL_START = 0;
+else
+    starts = ch_tstart_s(active_chs);
+    T_GLOBAL_START = max(starts);
+end
+
+fprintf(' [SYNC] Kanal başlangıç aralığı: %.3f s – %.3f s\n', ...
+    min(ch_tstart_s(active_chs)), max(ch_tstart_s(active_chs)));
+fprintf(' [SYNC] Global t=0 (ortak başlangıç): %.3f s\n', T_GLOBAL_START);
+if T_GLOBAL_START > 0.01
+    late_idx = active_chs(ch_tstart_s(active_chs) == T_GLOBAL_START);
+    fprintf('        En geç hazır olan kanal: %s\n', ch_names(late_idx(1)));
+end
+fprintf('\n');
+
+% ======================================================================
 %% 4. TAMAMLAYICI FİLTRE — IMU döngüsü
 % ======================================================================
 
@@ -215,18 +303,29 @@ for i = 1:N_IMU
     fs_i = imu_fs(i);
     if fs_i <= 0, fs_i = IMU_FS; end
 
-    % Kanal verilerini çek ve NaN kırp
-    acc  = zeros(N_samp, 3);
-    gyro = zeros(N_samp, 3);
+    % ── Senkronizasyon: global t=0'a karşılık gelen sütun indeksi ─────
+    % T_GLOBAL_START saniyeye IMU Fs'iyle karşılık gelen sütun indeksi:
+    %   Sütun i_start_imu → IMU zamanı T_GLOBAL_START s
+    i_start_imu = max(1, round(T_GLOBAL_START * fs_i) + 1);
+    n_avail_imu = N_samp - i_start_imu + 1;
 
-    acc(:,1)  = getRow(data_mat, imu_idx(i).accX, N_samp);
-    acc(:,2)  = getRow(data_mat, imu_idx(i).accY, N_samp);
-    acc(:,3)  = getRow(data_mat, imu_idx(i).accZ, N_samp);
-    gyro(:,1) = getRow(data_mat, imu_idx(i).gyrX, N_samp);
-    gyro(:,2) = getRow(data_mat, imu_idx(i).gyrY, N_samp);
-    gyro(:,3) = getRow(data_mat, imu_idx(i).gyrZ, N_samp);
+    if n_avail_imu < 10
+        fprintf('   %-25s → ATLANDI (senkron sonrası kalan örnek < 10)\n', label);
+        imu_angles{i} = []; imu_time{i} = []; continue
+    end
 
-    % Geçerli örnek sayısını bul (sondaki NaN'ları kırp)
+    % Boşluk doldurulmuş veriden global t=0'dan itibaren çek
+    acc  = zeros(n_avail_imu, 3);
+    gyro = zeros(n_avail_imu, 3);
+
+    acc(:,1)  = getRowSync(data_sync, imu_idx(i).accX, n_avail_imu, i_start_imu);
+    acc(:,2)  = getRowSync(data_sync, imu_idx(i).accY, n_avail_imu, i_start_imu);
+    acc(:,3)  = getRowSync(data_sync, imu_idx(i).accZ, n_avail_imu, i_start_imu);
+    gyro(:,1) = getRowSync(data_sync, imu_idx(i).gyrX, n_avail_imu, i_start_imu);
+    gyro(:,2) = getRowSync(data_sync, imu_idx(i).gyrY, n_avail_imu, i_start_imu);
+    gyro(:,3) = getRowSync(data_sync, imu_idx(i).gyrZ, n_avail_imu, i_start_imu);
+
+    % Sondaki NaN'ları kırp (sensör kaydı IMU Fs'inde erken bitmiş olabilir)
     valid = find(~any(isnan([acc gyro]), 2), 1, 'last');
     if isempty(valid) || valid < 10
         fprintf('   %-25s → ATLANDI (geçerli veri < 10 örnek)\n', label);
@@ -235,6 +334,7 @@ for i = 1:N_IMU
     acc  = acc(1:valid,  :);
     gyro = gyro(1:valid, :);
 
+    % t=0 → global senkron başlangıcı (T_GLOBAL_START s = kayıt açılışından)
     t_i = (0:valid-1)' / fs_i;
     imu_time{i} = t_i;
 
@@ -272,14 +372,29 @@ for i = 1:N_EMG
         continue
     end
 
-    raw_full = data_mat(emg_idx(i), :)';   % N_samp×1
+    fs_e  = emg_fs(i); if fs_e <= 0, fs_e = EMG_FS; end
+
+    % ── Senkronizasyon: EMG için global t=0 sütun indeksi ─────────────
+    i_start_emg = max(1, round(T_GLOBAL_START * fs_e) + 1);
+    n_avail_emg = N_samp - i_start_emg + 1;
+
+    if n_avail_emg < 20
+        fprintf('   %-25s → ATLANDI (senkron sonrası kalan < 20 örnek)\n', label);
+        continue
+    end
+
+    % Boşluk doldurulmuş veriden global t=0'dan itibaren çek
+    ch_e = emg_idx(i);
+    raw_full = double(data_sync(ch_e, i_start_emg : min(end, i_start_emg+n_avail_emg-1)))';
+
+    % Sondaki NaN kırp (EMG kaydı daha erken bitmişse)
     valid = find(~isnan(raw_full), 1, 'last');
     if isempty(valid) || valid < 20
         fprintf('   %-25s → ATLANDI (geçerli veri yok)\n', label);
         continue
     end
     raw_v = raw_full(1:valid);
-    fs_e  = emg_fs(i); if fs_e <= 0, fs_e = EMG_FS; end
+    raw_v(isnan(raw_v)) = 0;   % fill_gaps_1d sonrası artık NaN kalmaz; güvenlik
 
     % Filtre
     try
@@ -457,6 +572,18 @@ annotation(fig,'textbox',[0.01 0.01 0.99 0.025], ...
 % ======================================================================
 
 fprintf('\n======================================================\n');
+fprintf(' SENKRONIZASYON ÖZETI\n');
+fprintf('======================================================\n');
+fprintf(' Global t=0 ofseti: %.3f s (tüm sensörler bu noktadan başlıyor)\n', T_GLOBAL_START);
+fprintf(' Kanal başlangıç istatistikleri:\n');
+if ~isempty(active_chs)
+    fprintf('   Min başlangıç: %.3f s  |  Max başlangıç: %.3f s\n', ...
+        min(ch_tstart_s(active_chs)), max(ch_tstart_s(active_chs)));
+    fprintf('   Kanal sayısı: %d  |  Senkron kayıp: %.3f s\n', ...
+        numel(active_chs), T_GLOBAL_START);
+end
+
+fprintf('\n======================================================\n');
 fprintf(' ÖZET — IMU Açı Maks. Değerleri\n');
 fprintf('======================================================\n');
 fprintf(' %-25s  %8s  %8s  %8s  %10s\n', ...
@@ -584,6 +711,101 @@ if isempty(ch_idx)
 else
     row = double(data_mat(ch_idx(1), :))';
     row(isnan(row)) = 0;
+end
+end
+
+% ── Senkronize veri çekme (global t=0'dan itibaren) ──────────────────
+function row = getRowSync(data_mat, ch_idx, n_avail, i_start)
+% Boşluk doldurulmuş veri matrisinden global t=0'a hizalanmış veri çeker.
+% ch_idx: kanal indeksi (boşsa sıfır döndürür)
+% n_avail: istenilen örnek sayısı
+% i_start: global t=0'a karşılık gelen matris sütun indeksi
+if isempty(ch_idx)
+    row = zeros(n_avail, 1);
+    return
+end
+full_row = double(data_mat(ch_idx(1), :))';
+n_full   = numel(full_row);
+i_end    = min(i_start + n_avail - 1, n_full);
+n_actual = i_end - i_start + 1;
+row      = zeros(n_avail, 1);
+if n_actual > 0
+    seg = full_row(i_start:i_end);
+    seg(isnan(seg)) = 0;
+    row(1:n_actual) = seg;
+end
+end
+
+% ── İç Boşluk Doldurma (NaN + uzun sıfır blokları) ──────────────────
+function seg_out = fill_gaps_1d(seg, fs, gap_max_s, zero_thresh, zero_min_s)
+% FILL_GAPS_1D  Bir segment içindeki NaN ve uzun-sıfır bloklarını doldurur.
+%
+%   Kısa boşluklar (≤ gap_max_s):  lineer interpolasyon
+%   Uzun boşluklar (> gap_max_s):  sıfır ile doldurulur (interpolasyon yok)
+%
+%   Algoritma:
+%     1. abs(x) < zero_thresh olan VE süresi ≥ zero_min_s olan blokları
+%        NaN olarak işaretle (ADC sıfır-dolgu tespiti)
+%     2. Tüm NaN bloklarını uzunluklarına göre işle
+
+seg_out = double(seg(:));
+N = numel(seg_out);
+if N < 2, return; end
+
+gap_max_samp  = max(1, round(gap_max_s  * fs));
+zero_min_samp = max(1, round(zero_min_s * fs));
+
+% Adım 1: uzun sıfır bloklarını NaN'a çevir
+i = 1;
+while i <= N
+    if ~isnan(seg_out(i)) && abs(seg_out(i)) < zero_thresh
+        j = i + 1;
+        while j <= N && ~isnan(seg_out(j)) && abs(seg_out(j)) < zero_thresh
+            j = j + 1;
+        end
+        block_len = j - i;
+        if block_len >= zero_min_samp
+            seg_out(i:j-1) = NaN;
+        end
+        i = j;
+    else
+        i = i + 1;
+    end
+end
+
+% Adım 2: NaN bloklarını tespit et ve doldur
+nan_mask = isnan(seg_out);
+if ~any(nan_mask), return; end
+
+nan_starts = find(diff([0; nan_mask(:)]) ==  1);
+nan_ends   = find(diff([nan_mask(:); 0]) == -1);
+
+for b = 1:numel(nan_starts)
+    s = nan_starts(b);
+    e = nan_ends(b);
+    block_len = e - s + 1;
+
+    left  = s - 1;
+    right = e + 1;
+
+    if left < 1 && right <= N
+        % Sol kenar boşluğu: sağ değerle sabit doldur
+        seg_out(s:e) = seg_out(right);
+    elseif right > N && left >= 1
+        % Sağ kenar boşluğu: sol değerle sabit doldur
+        seg_out(s:e) = seg_out(left);
+    elseif left >= 1 && right <= N
+        if block_len <= gap_max_samp
+            % Kısa iç boşluk: lineer interpolasyon
+            left_val  = seg_out(left);
+            right_val = seg_out(right);
+            interp_v  = linspace(left_val, right_val, block_len + 2);
+            seg_out(s:e) = interp_v(2:end-1);
+        else
+            % Uzun iç boşluk: komşu değerlerin ortalaması ile sabit doldur
+            seg_out(s:e) = (seg_out(left) + seg_out(right)) / 2;
+        end
+    end
 end
 end
 
