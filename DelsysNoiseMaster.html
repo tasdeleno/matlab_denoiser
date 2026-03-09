@@ -608,6 +608,11 @@ canvas {
   content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, var(--yellow), transparent);
 }
+.gyro-metric-card.peak::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, #ff4444, transparent);
+}
+.gyro-angle-canvas { height: 280px; }
 .gyro-metric-val {
   font-family: var(--mono); font-size: 1.35rem; font-weight: 700;
   line-height: 1; transition: all 0.35s;
@@ -1129,6 +1134,25 @@ canvas {
           </div>
         </div>
 
+        <!-- Hareket Eşiği -->
+        <div class="panel">
+          <div class="panel-title">Hareket Eşiği</div>
+          <p style="font-size:0.78rem;color:var(--text-mid);line-height:1.65;margin-bottom:12px">
+            Açının bu değeri <strong>aşmaması</strong> gerekiyorsa girin. Grafik eşik altını <span style="color:#3dffa0">yeşil</span>, üstünü <span style="color:#ff6060">kırmızı</span> gösterir.
+          </p>
+          <div class="form-group" style="margin-bottom:8px">
+            <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;cursor:pointer;color:var(--text-mid)">
+              <input type="checkbox" id="gyro-threshold-on" checked style="accent-color:#3dffa0;width:14px;height:14px">
+              Eşik çizgisini göster
+            </label>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <div class="form-label">Hedef Açı<span class="val"><span id="gyro-thr-val">90</span>°</span></div>
+            <input type="number" id="gyro-threshold" value="90" min="-360" max="360" step="1"
+              oninput="document.getElementById('gyro-thr-val').textContent=this.value">
+          </div>
+        </div>
+
         <!-- Algoritma Adımları -->
         <div class="panel">
           <div class="panel-title">Algoritma</div>
@@ -1195,6 +1219,31 @@ canvas {
             <div class="gyro-metric-val" style="color:var(--blue);font-size:1.1rem;text-shadow:0 0 14px rgba(90,171,255,0.35)" id="g-fs-dur">—</div>
             <div class="metric-unit">Hz / saniye</div>
           </div>
+          <!-- Yeni: eşik bazlı metrikler -->
+          <div class="gyro-metric-card peak">
+            <div class="metric-label">Maks Açı</div>
+            <div class="metric-desc">Kayıt boyunca ulaşılan tepe açı</div>
+            <div class="gyro-metric-val" style="color:#ff8080;font-size:1.15rem;text-shadow:0 0 14px rgba(255,68,68,0.35)" id="g-max-angle">—</div>
+            <div class="metric-unit">derece (tepe)</div>
+          </div>
+          <div class="gyro-metric-card drift">
+            <div class="metric-label">Maks Anı</div>
+            <div class="metric-desc">Tepe açıya ulaşılan zaman</div>
+            <div class="gyro-metric-val" style="color:#ffb432;font-size:1.15rem;text-shadow:0 0 14px rgba(255,180,50,0.35)" id="g-max-time">—</div>
+            <div class="metric-unit">saniye</div>
+          </div>
+          <div class="gyro-metric-card peak">
+            <div class="metric-label">Hedef Aşımı</div>
+            <div class="metric-desc">Maks açı − hedef (+ ise aştı)</div>
+            <div class="gyro-metric-val" style="color:#ff8080;font-size:1.15rem;text-shadow:0 0 14px rgba(255,68,68,0.35)" id="g-exceedance">—</div>
+            <div class="metric-unit">derece</div>
+          </div>
+          <div class="gyro-metric-card drift">
+            <div class="metric-label">Eşik Üstü Süre</div>
+            <div class="metric-desc">Açının hedefi aştığı toplam süre</div>
+            <div class="gyro-metric-val" style="color:#ffb432;font-size:1.15rem;text-shadow:0 0 14px rgba(255,180,50,0.35)" id="g-time-above">—</div>
+            <div class="metric-unit">saniye</div>
+          </div>
         </div>
 
         <!-- Grafik: Açısal Hız -->
@@ -1215,19 +1264,20 @@ canvas {
             <div class="spinner-overlay" id="g-spinner"><div class="spinner"></div></div>
           </div>
 
-          <!-- Grafik: Ham Açı -->
+          <!-- Grafik: Açı + Eşik -->
           <div class="chart-container" style="position:relative">
             <div class="chart-header">
               <div>
-                <div class="chart-title">Hesaplanan Açı — Drift Karşılaştırması</div>
-                <div class="chart-subtitle">Ham integrasyon (drift'li) · HPF ile düzeltilmiş açı</div>
+                <div class="chart-title">Hesaplanan Açı — Hareket Analizi</div>
+                <div class="chart-subtitle">Turuncu kesikli = hedef eşik · <span style="color:#3dffa0">Yeşil</span> = hedef altı · <span style="color:#ff6060">Kırmızı</span> = hedef üstü</div>
               </div>
               <div class="chart-legend">
-                <div class="legend-item"><div class="legend-line" style="background:var(--yellow)"></div>Ham (drift'li)</div>
-                <div class="legend-item"><div class="legend-line" style="background:var(--green)"></div>Düzeltilmiş</div>
+                <div class="legend-item"><div class="legend-line" style="background:rgba(255,208,96,0.45)"></div>Ham (drift'li)</div>
+                <div class="legend-item"><div class="legend-line" style="background:#3dffa0"></div>Hedef altı</div>
+                <div class="legend-item"><div class="legend-line" style="background:#ff6060"></div>Hedef üstü</div>
               </div>
             </div>
-            <canvas id="g-angle-canvas" class="gyro-canvas"></canvas>
+            <canvas id="g-angle-canvas" class="gyro-canvas gyro-angle-canvas"></canvas>
             <div class="canvas-tooltip" id="g-angle-tooltip"></div>
             <div class="canvas-hint">🖱 Kaydır: zoom &nbsp;|&nbsp; Sürükle: kaydır</div>
           </div>
@@ -1337,8 +1387,8 @@ function switchTab(name) {
     ['p-signal-canvas','p-psd-canvas','s-signal-canvas','s-psd-canvas','g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
     redrawAll();
     if(name==='gyro') {
-      drawGyroSignal('g-vel-canvas',   gyroState.rawVelocity, 'Açısal Hız', '#5aabff', '°/s', gyroState.fs);
-      drawGyroSignal('g-angle-canvas', gyroState.angle, 'Açı', '#a78bfa', '°', gyroState.fs, gyroState.angleRaw);
+      drawGyroSignal('g-vel-canvas', gyroState.rawVelocity, 'Açısal Hız', '#5aabff', '°/s', gyroState.fs);
+      drawAngleChart('g-angle-canvas', gyroState.angle, gyroState.fs, gyroState.targetAngle, gyroState.showTarget, gyroState.angleRaw);
     }
   }, 50);
 }
@@ -2175,12 +2225,14 @@ function drawFreqResponse(canvasId, filterFn, fs) {
 //  GYROSCOPE ANALYSIS
 // ════════════════════════════════════════════════
 const gyroState = {
-  rawVelocity: null,   // input angular velocity (deg/s)
-  angleRaw:    null,   // integrated angle before drift correction
-  angle:       null,   // drift-corrected angle
-  fs:          200,
-  unit:        'deg',
-  duration:    10
+  rawVelocity:  null,   // input angular velocity (deg/s)
+  angleRaw:     null,   // integrated angle before drift correction
+  angle:        null,   // drift-corrected angle
+  fs:           200,
+  unit:         'deg',
+  duration:     10,
+  targetAngle:  90,     // hareket eşiği (°)
+  showTarget:   true    // eşik çizgisi göster
 };
 
 // ─── High-pass Butterworth (2nd order, zero-phase) ────────────────────────
@@ -2320,16 +2372,41 @@ function runGyroAnalysis() {
   gyroState.angleRaw = angleRaw;
   gyroState.unit     = unit;
 
-  // Metrics
-  const N           = omega.length;
-  const totalAngle  = angle[N - 1] - angle[0];
+  // Metrics — temel
+  const N            = omega.length;
+  const totalAngle   = angle[N - 1] - angle[0];
   const driftRemoved = Math.abs(angleRaw[N - 1] - angle[N - 1]);
-  const angleRange  = Math.max(...angle) - Math.min(...angle);
+  const angleRange   = Math.max(...angle) - Math.min(...angle);
 
   animateValue('g-total-angle',   isFinite(totalAngle)   ? totalAngle.toFixed(2)   + '°' : '—');
   animateValue('g-drift-removed', isFinite(driftRemoved) ? driftRemoved.toFixed(2) + '°' : '—');
   animateValue('g-angle-range',   isFinite(angleRange)   ? angleRange.toFixed(2)   + '°' : '—');
   animateValue('g-fs-dur',        `${fs} Hz / ${(N/fs).toFixed(1)} s`);
+
+  // Metrics — eşik bazlı
+  const targetAngle = parseFloat(document.getElementById('gyro-threshold').value);
+  const showTarget  = document.getElementById('gyro-threshold-on').checked;
+
+  let maxVal = -Infinity, maxIdx = 0;
+  let minVal =  Infinity;
+  for (let i = 0; i < N; i++) {
+    if (angle[i] > maxVal) { maxVal = angle[i]; maxIdx = i; }
+    if (angle[i] < minVal)   minVal = angle[i];
+  }
+  const maxTime = maxIdx / fs;
+  let samplesAbove = 0;
+  for (let i = 0; i < N; i++) { if (angle[i] > targetAngle) samplesAbove++; }
+  const timeAbove   = samplesAbove / fs;
+  const exceedance  = maxVal - targetAngle;
+
+  animateValue('g-max-angle',  isFinite(maxVal)    ? maxVal.toFixed(2) + '°' : '—');
+  animateValue('g-max-time',   isFinite(maxTime)   ? maxTime.toFixed(2) + ' s' : '—');
+  animateValue('g-exceedance', isFinite(exceedance) ? (exceedance > 0 ? '+' : '') + exceedance.toFixed(1) + '°' : '—');
+  animateValue('g-time-above', showTarget ? timeAbove.toFixed(2) + ' s' : '—');
+
+  // Gyro state — eşik bilgisini sakla (redraw için)
+  gyroState.targetAngle = targetAngle;
+  gyroState.showTarget  = showTarget;
 
   addGyroLog(`✓ Tamamlandı — ${lv(N+' örnek')}  işlem süresi: ${lv(elapsed+' ms')}`, 'success');
   addGyroLog(
@@ -2338,11 +2415,28 @@ function runGyroAnalysis() {
     `Aralık: ${lv(angleRange.toFixed(2)+'°','green')}`,
     'info'
   );
+  addGyroLog(
+    `Maks açı: ${lv(maxVal.toFixed(2)+'°', maxVal>targetAngle?'orange':'green')}  @  ${lv(maxTime.toFixed(2)+'s','blue')}`,
+    'info'
+  );
+  if (showTarget && isFinite(targetAngle)) {
+    if (exceedance > 0) {
+      addGyroLog(
+        `⚠ Hedef aşıldı: maks=${lv(maxVal.toFixed(1)+'°','orange')}  hedef=${lv(targetAngle+'°','green')}  aşım=${lv('+'+exceedance.toFixed(1)+'°','red')}  eşik üstü süre=${lv(timeAbove.toFixed(2)+'s','yellow')}`,
+        'warn'
+      );
+    } else {
+      addGyroLog(
+        `✓ Hedef altında kaldı: maks=${lv(maxVal.toFixed(1)+'°','green')}  hedef=${lv(targetAngle+'°')}`,
+        'success'
+      );
+    }
+  }
 
   // Draw
   ['g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
-  drawGyroSignal('g-vel-canvas',   omegaDeg, 'Açısal Hız', '#5aabff', '°/s', fs);
-  drawGyroSignal('g-angle-canvas', angle,    'Açı',        '#a78bfa', '°',   fs, angleRaw);
+  drawGyroSignal('g-vel-canvas', omegaDeg, 'Açısal Hız', '#5aabff', '°/s', fs);
+  drawAngleChart('g-angle-canvas', angle, fs, targetAngle, showTarget, angleRaw);
   toast('Açıya çevrildi', 'success');
 }
 
@@ -2441,6 +2535,185 @@ function drawGyroSignal(canvasId, signal, label, color, yUnit, fs, signal2) {
   if (signal2) {
     ctx.fillStyle = 'rgba(255,208,96,0.55)'; ctx.font = '10px Inter,sans-serif';
     ctx.fillText('Ham (drift)', pad.l + pw - 88, pad.t + 16);
+  }
+}
+
+// ─── Angle chart with threshold coloring ──────────────────────────────
+function drawAngleChart(canvasId, angle, fs, targetAngle, showTarget, angleRaw) {
+  const c = document.getElementById(canvasId); if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.clientWidth, H = c.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H);
+
+  const pad = { l: 68, r: 24, t: 28, b: 40 };
+  const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+  if (!angle || !angle.length) {
+    ctx.fillStyle = 'rgba(74,96,122,0.4)';
+    ctx.font = '13px JetBrains Mono,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Veri bekleniyor…', W / 2, H / 2);
+    return;
+  }
+
+  const n = angle.length;
+  const step = Math.max(1, Math.floor(n / (pw * 1.5)));
+
+  // ── Y range (angle + raw + threshold) ──
+  let yMin = Infinity, yMax = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (angle[i] < yMin) yMin = angle[i];
+    if (angle[i] > yMax) yMax = angle[i];
+    if (angleRaw) {
+      if (angleRaw[i] < yMin) yMin = angleRaw[i];
+      if (angleRaw[i] > yMax) yMax = angleRaw[i];
+    }
+  }
+  if (showTarget && isFinite(targetAngle)) {
+    if (targetAngle > yMax) yMax = targetAngle;
+    if (targetAngle < yMin) yMin = targetAngle;
+  }
+  const yRange = yMax - yMin || 1, yPad = yRange * 0.18;
+  yMin -= yPad; yMax += yPad;
+
+  const toY = v => pad.t + ph * (1 - (v - yMin) / (yMax - yMin));
+  const toX = i => pad.l + pw * i / (n - 1);
+
+  // ── Grid ──
+  const nX = 6, nY = 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= nX; i++) { const x = pad.l + pw*i/nX; ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ph); ctx.stroke(); }
+  for (let i = 0; i <= nY; i++) { const y = pad.t + ph*i/nY; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+pw,y); ctx.stroke(); }
+
+  // ── Y labels ──
+  ctx.fillStyle = 'rgba(128,153,187,0.8)'; ctx.font = '10px JetBrains Mono,monospace'; ctx.textAlign = 'right';
+  for (let i = 0; i <= nY; i++) {
+    const v = yMax - (yMax - yMin) * i / nY;
+    ctx.fillText(v.toFixed(1) + '°', pad.l - 6, pad.t + ph * i / nY + 4);
+  }
+
+  // ── X labels ──
+  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(128,153,187,0.7)'; ctx.font = '10px JetBrains Mono,monospace';
+  for (let i = 0; i <= nX; i++) {
+    const idx = Math.round((n-1) * i / nX);
+    ctx.fillText((idx / fs).toFixed(2) + 's', pad.l + pw * i / nX, pad.t + ph + 22);
+  }
+
+  // ── Axis titles ──
+  ctx.fillStyle = 'rgba(90,171,255,0.45)'; ctx.font = '10px JetBrains Mono,monospace'; ctx.textAlign = 'center';
+  ctx.fillText('Zaman (s)', pad.l + pw / 2, H - 4);
+  ctx.save(); ctx.translate(13, pad.t + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Açı (°)', 0, 0); ctx.restore();
+
+  // ── Zero line ──
+  if (yMin < 0 && yMax > 0) {
+    const zy = toY(0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.setLineDash([4,6]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, zy); ctx.lineTo(pad.l+pw, zy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(128,153,187,0.35)'; ctx.font = '9px JetBrains Mono,monospace'; ctx.textAlign = 'left';
+    ctx.fillText('0°', pad.l + 3, zy - 3);
+  }
+
+  // ── Threshold: red fill + dashed line ──
+  if (showTarget && isFinite(targetAngle)) {
+    const thrY = toY(targetAngle);
+
+    // Red fill above threshold (clipped)
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.l, pad.t, pw, Math.max(0, thrY - pad.t)); ctx.clip();
+    ctx.beginPath();
+    ctx.moveTo(toX(0), thrY);
+    for (let i = 0; i < n; i += step) ctx.lineTo(toX(i), toY(angle[i]));
+    ctx.lineTo(toX(n-1), thrY); ctx.closePath();
+    ctx.fillStyle = 'rgba(255,50,50,0.14)'; ctx.fill();
+    ctx.restore();
+
+    // Dashed orange threshold line
+    ctx.strokeStyle = 'rgba(255,180,50,0.85)'; ctx.lineWidth = 1.5; ctx.setLineDash([10,6]);
+    ctx.beginPath(); ctx.moveTo(pad.l, thrY); ctx.lineTo(pad.l+pw, thrY); ctx.stroke(); ctx.setLineDash([]);
+
+    // Threshold label (right side)
+    ctx.fillStyle = 'rgba(255,180,50,0.9)'; ctx.font = 'bold 11px JetBrains Mono,monospace'; ctx.textAlign = 'right';
+    ctx.fillText('Hedef: ' + targetAngle + '°', pad.l + pw - 6, thrY - 5);
+  }
+
+  // ── Raw angle (dim background) ──
+  if (angleRaw) {
+    ctx.strokeStyle = 'rgba(255,208,96,0.22)'; ctx.lineWidth = 1; ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    for (let i = 0; i < n; i += step) {
+      const px = toX(i), py = toY(angleRaw[i]);
+      i === 0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+    }
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+
+  // ── Main signal — green below threshold, red above ──
+  ctx.lineWidth = 2; ctx.shadowBlur = 7; ctx.globalAlpha = 0.95;
+
+  if (showTarget && isFinite(targetAngle)) {
+    // Segment-by-segment coloring
+    const thrY = toY(targetAngle);
+    const paths = { green: [], red: [] };
+    let prevAbove = angle[0] > targetAngle;
+    let cur = prevAbove ? paths.red : paths.green;
+    cur.push({ x: toX(0), y: toY(angle[0]), m: true });
+
+    for (let i = step; i < n; i += step) {
+      const px = toX(i), py = toY(angle[i]);
+      const isAbove = angle[i] > targetAngle;
+      if (isAbove !== prevAbove) {
+        cur.push({ x: px, y: thrY });         // snap to threshold at crossing
+        cur = isAbove ? paths.red : paths.green;
+        cur.push({ x: px, y: thrY, m: true }); // start new segment from threshold
+        prevAbove = isAbove;
+      }
+      cur.push({ x: px, y: py });
+    }
+    for (const [col, pts] of [['#3dffa0', paths.green], ['#ff4444', paths.red]]) {
+      if (!pts.length) continue;
+      ctx.strokeStyle = col; ctx.shadowColor = col;
+      ctx.beginPath();
+      for (const pt of pts) pt.m ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y);
+      ctx.stroke();
+    }
+  } else {
+    ctx.strokeStyle = '#a78bfa'; ctx.shadowColor = '#a78bfa';
+    ctx.beginPath();
+    for (let i = 0; i < n; i += step) {
+      const px = toX(i), py = toY(angle[i]);
+      i === 0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+    }
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+
+  // ── MAX annotation (dot + label) ──
+  let maxVal = -Infinity, maxIdx = 0;
+  for (let i = 0; i < n; i++) { if (angle[i] > maxVal) { maxVal = angle[i]; maxIdx = i; } }
+  const mxX = toX(maxIdx), mxY = toY(maxVal);
+  const isOver = showTarget && isFinite(targetAngle) && maxVal > targetAngle;
+  const dotCol = isOver ? '#ff4444' : '#3dffa0';
+
+  ctx.beginPath(); ctx.arc(mxX, mxY, 5.5, 0, Math.PI*2);
+  ctx.fillStyle = dotCol; ctx.shadowColor = dotCol; ctx.shadowBlur = 12;
+  ctx.fill(); ctx.shadowBlur = 0;
+
+  const lbX = Math.min(mxX + 9, pad.l + pw - 90);
+  const lbY = mxY < pad.t + 22 ? mxY + 18 : mxY - 8;
+  ctx.fillStyle = dotCol; ctx.font = 'bold 11px JetBrains Mono,monospace'; ctx.textAlign = 'left';
+  ctx.fillText('MAX: ' + maxVal.toFixed(1) + '°', lbX, lbY);
+
+  // ── Legend ──
+  ctx.font = '10px Inter,sans-serif'; ctx.textAlign = 'left';
+  if (showTarget && isFinite(targetAngle)) {
+    ctx.fillStyle = '#3dffa0'; ctx.fillText('● Hedef altı', pad.l + 6, pad.t + 16);
+    ctx.fillStyle = '#ff6060'; ctx.fillText('● Hedef üstü', pad.l + 86, pad.t + 16);
+    if (angleRaw) { ctx.fillStyle = 'rgba(255,208,96,0.5)'; ctx.fillText('─ Ham', pad.l + 172, pad.t + 16); }
+  } else {
+    ctx.fillStyle = '#a78bfa'; ctx.font = 'bold 10px Inter,sans-serif';
+    ctx.fillText('Düzeltilmiş Açı', pad.l + 6, pad.t + 16);
+    if (angleRaw) { ctx.fillStyle = 'rgba(255,208,96,0.5)'; ctx.font = '10px Inter,sans-serif'; ctx.fillText('Ham (drift)', pad.l + pw - 88, pad.t + 16); }
   }
 }
 
@@ -2549,8 +2822,8 @@ window.addEventListener('load',()=>{
   setupCanvasInteraction('s-signal-canvas','s-tooltip',()=>state.synthetic);
   drawFreqResponse('p-freq-resp-canvas', null, 2000);
   drawFreqResponse('s-freq-resp-canvas', null, 2000);
-  drawGyroSignal('g-vel-canvas',   null, 'Açısal Hız', '#5aabff', '°/s', 200);
-  drawGyroSignal('g-angle-canvas', null, 'Açı',        '#a78bfa', '°',   200);
+  drawGyroSignal('g-vel-canvas', null, 'Açısal Hız', '#5aabff', '°/s', 200);
+  drawAngleChart('g-angle-canvas', null, 200, 90, true, null);
 
   // Gyro drop zone
   const gdz = document.getElementById('gyro-drop-zone');
@@ -2581,8 +2854,8 @@ window.addEventListener('resize',()=>{
    's-signal-canvas','s-psd-canvas','s-freq-resp-canvas',
    'g-vel-canvas','g-angle-canvas'].forEach(resizeCanvas);
   redrawAll();
-  drawGyroSignal('g-vel-canvas',   gyroState.rawVelocity, 'Açısal Hız', '#5aabff', '°/s', gyroState.fs);
-  drawGyroSignal('g-angle-canvas', gyroState.angle,       'Açı',        '#a78bfa', '°',   gyroState.fs, gyroState.angleRaw);
+  drawGyroSignal('g-vel-canvas', gyroState.rawVelocity, 'Açısal Hız', '#5aabff', '°/s', gyroState.fs);
+  drawAngleChart('g-angle-canvas', gyroState.angle, gyroState.fs, gyroState.targetAngle, gyroState.showTarget, gyroState.angleRaw);
 });
 </script>
 </body>
