@@ -3058,6 +3058,11 @@ const Mat5 = (() => {
     return pako.inflate(arr).buffer;
   }
 
+  // parseMatrix'i exception yakalamak için sarmalayan yardımcı
+  function tryParseMatrix(v, startPos, le) {
+    try { return parseMatrix(v, startPos, le); } catch (_) { return null; }
+  }
+
   return {
     // Ana parse fonksiyonu: ArrayBuffer → {varAdı: {name,class,dims,data}}
     parse(buffer) {
@@ -3078,23 +3083,52 @@ const Mat5 = (() => {
         const padded = p8(nBytes);
 
         try {
-          let matBuf = null;
+          let matBuf    = null;
+          let parseOff  = 0;   // decompressed buf için parseMatrix başlangıç ofseti
 
-          if (type === 15) {                 // miCOMPRESSED — standart zlib
-            matBuf = tryDecompress(buffer, pos + 8, nBytes, 0);
-          } else if (type === 63) {          // Delsys özel sıkıştırma — 4 ekstra byte başlık
-            try { matBuf = tryDecompress(buffer, pos + 8, nBytes, 4); }
-            catch (_) { matBuf = tryDecompress(buffer, pos + 8, nBytes, 0); }
-          } else if (type === 14) {          // miMATRIX sıkıştırılmamış
-            matBuf = buffer.slice(pos + 8, pos + 8 + nBytes);
+          if (type === 15) {
+            // miCOMPRESSED (standart) — açılan içerik tam element başlığını içerir:
+            // [4b type=14][4b nBytes][matrix içeriği...]
+            // parseMatrix matrix IÇERIĞINDEN başlamalı → offset=8
+            matBuf   = tryDecompress(buffer, pos + 8, nBytes, 0);
+            parseOff = 8;
+
+          } else if (type === 63) {
+            // Delsys özel sıkıştırma — 4 ekstra byte başlık denenir
+            // Açılan içerik de type=14 başlığıyla başlayabilir → önce offset=8 dene
+            let decompBuf = null;
+            for (const skip of [4, 0, 8]) {
+              try { decompBuf = tryDecompress(buffer, pos + 8, nBytes, skip); break; }
+              catch (_) { /* sonraki skip'i dene */ }
+            }
+            if (!decompBuf) throw new Error(`type=63 decompress başarısız (pos=${pos})`);
+            matBuf = decompBuf;
+            // offset=8 (type=14 başlığı var) veya offset=0 (direkt içerik) — ikisini dene
+            const mv8 = new DataView(matBuf);
+            const m8  = tryParseMatrix(mv8, 8, le);
+            if (m8 && m8.name) { if (m8.name) vars[m8.name] = m8; }
+            else {
+              const m0 = tryParseMatrix(mv8, 0, le);
+              if (m0 && m0.name) vars[m0.name] = m0;
+            }
+            pos += 8 + padded;
+            continue; // yukarıda doğrudan ekledik, genel kodun tekrar eklemesini engelle
+
+          } else if (type === 14) {
+            // miMATRIX sıkıştırılmamış — başlık atlanarak dilim alındı
+            matBuf   = buffer.slice(pos + 8, pos + 8 + nBytes);
+            parseOff = 0;
           }
 
           if (matBuf) {
             const mv  = new DataView(matBuf);
-            const mat = parseMatrix(mv, 0, le);
+            const mat = tryParseMatrix(mv, parseOff, le);
             if (mat && mat.name) vars[mat.name] = mat;
           }
-        } catch (_) { /* parse hatası — bu elemanı atla */ }
+        } catch (dbgErr) {
+          // Hata sessizce yutulur; konsola yazılır
+          console.warn('[mat5] pos=' + pos + ' type=' + type + ':', dbgErr.message);
+        }
 
         pos += 8 + padded;
       }
@@ -3172,7 +3206,16 @@ async function handleMatFile(file) {
   }
 
   const varNames = Object.keys(vars);
-  addGyroLog(`Değişkenler: ${varNames.length > 0 ? varNames.join(', ') : '(hiç bulunamadı)'}`, 'info');
+  if (varNames.length > 0) {
+    addGyroLog(`Ayrıştırılan değişkenler: ${varNames.join(', ')}`, 'info');
+    for (const k of varNames) {
+      const v = vars[k];
+      const dimStr = v.dims ? v.dims.join('×') : '?';
+      addGyroLog(`  ${k}: class=${v.class} dims=[${dimStr}] data=${v.data != null ? 'var' : 'null'}`, 'info');
+    }
+  } else {
+    addGyroLog('⚠ Hiç değişken ayrıştırılamadı — tarayıcı konsolunu kontrol edin', 'warn');
+  }
 
   // Delsys format kontrolü
   if (!vars.Channels && !vars.Fs) {
