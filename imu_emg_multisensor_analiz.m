@@ -64,26 +64,36 @@ EMG_ASYM   = 15;  % Sol-sağ EMG asimetri toleransı [%]
 
 % ── IMU sensör tanımları ───────────────────────────────────────────────
 % Her satır: {kanal_keyword, etiket, renk}
-% keyword: BÜYÜK/küçük harf farksız kanal adı içinde aranır.
-% Delsys örnek isimlendirme: "T8T9 Mid-thoracic: GYRO.X"
-% Kendi dosyanıza göre keyword'leri düzenleyin.
+% keyword: BÜYÜK/küçük harf farksız, kanal adı içinde aranır (contains).
+%
+% GERÇEK KANAL İSİMLENDİRMESİ (exerA_Plot_and_Store_Rep_1.15.mat'tan):
+%   "IMU T1T2 (7): ACC.X 7"   "IMU T8T9 (8): GYRO.Z 8"
+%   "Sacrum (10): ACC.Y 10"   "L scapula (11): GYRO.X 11"
+%
+% Keyword seçimi: kanal isminde özgün olarak geçen kısa string yeterli.
 IMU_DEF = {
-    'T1',       'T1-T2  (Üst Torakal)',  [0.20 0.60 0.85];
-    'T8',       'T8-T9  (Mid Torakal)',  [0.85 0.30 0.10];
-    'L2',       'L2-L3  (Lumbar)',       [0.10 0.70 0.30];
-    'Sacrum',   'Sakrum (Pelvis)',        [0.60 0.10 0.80];
-    'Scapula.L','Sol Skapula',           [0.90 0.60 0.10];
-    'Scapula.R','Sağ Skapula',           [0.30 0.80 0.80];
+    'T1T2',      'T1-T2  (Üst Torakal)',  [0.20 0.60 0.85];
+    'T8T9',      'T8-T9  (Mid Torakal)',  [0.85 0.30 0.10];
+    'L2L3',      'L2-L3  (Lumbar)',       [0.10 0.70 0.30];
+    'Sacrum',    'Sakrum (Pelvis)',        [0.60 0.10 0.80];
+    'L scapula', 'Sol Skapula',           [0.90 0.60 0.10];
+    'R scapula', 'Sağ Skapula',           [0.30 0.80 0.80];
 };
 
 % ── EMG sensör tanımları ───────────────────────────────────────────────
+% GERÇEK KANAL İSİMLENDİRMESİ (aynı dosyadan):
+%   "L TRAPEZIUS (5): EMG 5"        "R TRAPEZIUS (6): EMG 6"
+%   "L LATISSIMUS DORSI (1): EMG 1" "R LATISSIMUS DORSI (2): EMG 2"
+%   "L Erector spinae (3): EMG 3"   "R Erector spinae (4): EMG 4"
+%
+% NOT: Kanal eşleştirme; keyword'ü içeren VE "EMG" içeren kanalı seçer.
 EMG_DEF = {
-    'Upper Trapezius.L',  'Sol Trapezius',        [0.20 0.60 0.85];
-    'Upper Trapezius.R',  'Sağ Trapezius',        [0.85 0.30 0.10];
-    'Latissimus Dorsi.L', 'Sol Latissimus',       [0.10 0.70 0.30];
-    'Latissimus Dorsi.R', 'Sağ Latissimus',       [0.60 0.10 0.80];
-    'Erector Spinae.L',   'Sol Erector Spinae',   [0.90 0.55 0.10];
-    'Erector Spinae.R',   'Sağ Erector Spinae',   [0.30 0.80 0.80];
+    'L TRAPEZIUS',     'Sol Trapezius',        [0.20 0.60 0.85];
+    'R TRAPEZIUS',     'Sağ Trapezius',        [0.85 0.30 0.10];
+    'L LATISSIMUS',    'Sol Latissimus',       [0.10 0.70 0.30];
+    'R LATISSIMUS',    'Sağ Latissimus',       [0.60 0.10 0.80];
+    'L Erector',       'Sol Erector Spinae',   [0.90 0.55 0.10];
+    'R Erector',       'Sağ Erector Spinae',   [0.30 0.80 0.80];
 };
 
 N_IMU = size(IMU_DEF, 1);   % 6
@@ -113,11 +123,36 @@ fprintf('======================================================\n');
 raw = load(mat_file);
 
 % Delsys format kontrolü
-if ~isfield(raw,'Channels') || ~isfield(raw,'Data') || ~isfield(raw,'Fs')
+if ~isfield(raw,'Channels') || ~isfield(raw,'Fs')
     error(['Delsys formatı bulunamadı.\n' ...
            'Gerekli değişkenler: Channels, Fs, Data\n' ...
-           'Yeniden export: Delsys Lab → File → Export → MATLAB (.mat)\n' ...
-           '  "Include Signal Data" seçili olmalı.']);
+           'Export: Delsys Trigno Lab → File → Export → MATLAB (.mat)']);
+end
+if ~isfield(raw,'Data')
+    % Time-only export tespiti
+    has_time = isfield(raw, 'Time');
+    if has_time
+        fprintf('\n[HATA] Bu dosyada sadece Time (zaman ekseni) var, sinyal verisi YOK.\n');
+        fprintf('       Dosyadaki değişkenler: Channels, Fs, Time\n\n');
+        fprintf('  ▶ Çözüm: Delsys Trigno Lab''da şu adımları izleyin:\n');
+        fprintf('       1. File → Export → MATLAB (.mat)\n');
+        fprintf('       2. Export Options penceresinde:\n');
+        fprintf('            [✓] Data  ← Bu kutuyu işaretleyin (genlik verisi)\n');
+        fprintf('            [ ] Time  ← Bunu işaretlemenize gerek yok\n');
+        fprintf('       3. Dosyayı kaydedin ve bu scripti tekrar çalıştırın.\n\n');
+        fprintf('  NOT: Bu dosyadaki %d kanal tanımı okundu:\n', numel(string(raw.Channels(:))));
+        ch_preview = string(raw.Channels(:));
+        for kk = 1:min(10, numel(ch_preview))
+            fprintf('       [%3d] %s\n', kk, ch_preview(kk));
+        end
+        if numel(ch_preview) > 10
+            fprintf('       ... ve %d kanal daha.\n', numel(ch_preview)-10);
+        end
+    else
+        fprintf('\n[HATA] Data değişkeni bulunamadı.\n');
+        fprintf('       Delsys Lab → File → Export → MATLAB (.mat) → "Data" seçili olmalı.\n');
+    end
+    error('Data değişkeni eksik. Yukarıdaki adımları takip ederek re-export yapın.');
 end
 
 % Kanal meta
