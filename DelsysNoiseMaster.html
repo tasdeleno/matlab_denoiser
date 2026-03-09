@@ -619,8 +619,75 @@ canvas {
 }
 .gyro-metric-val.ang-val  { color: var(--purple); text-shadow: 0 0 14px rgba(167,139,250,0.35); }
 .gyro-metric-val.drift-val { color: var(--yellow); text-shadow: 0 0 14px rgba(255,208,96,0.35); }
+
+/* ── MAT dosya modalı ── */
+.mat-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; backdrop-filter: blur(4px);
+}
+.mat-modal {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 14px; width: min(640px, 96vw); max-height: 80vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+}
+.mat-modal-header {
+  padding: 18px 22px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.mat-modal-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+.mat-modal-sub   { font-size: 0.78rem; color: var(--text-mid); margin-top: 3px; }
+.mat-modal-close {
+  background: none; border: none; cursor: pointer; color: var(--text-mid);
+  font-size: 1.3rem; line-height: 1; padding: 4px 8px; border-radius: 6px;
+  transition: background 0.2s, color 0.2s;
+}
+.mat-modal-close:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.mat-modal-body  { padding: 14px 22px; overflow-y: auto; flex: 1; }
+.mat-modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+.mat-ch-filter {
+  width: 100%; padding: 8px 12px; background: var(--surface3);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-size: 0.83rem; margin-bottom: 10px; outline: none;
+}
+.mat-ch-filter:focus { border-color: var(--accent); }
+.mat-ch-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.mat-ch-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.mat-ch-item:hover  { background: rgba(255,255,255,0.06); }
+.mat-ch-item.sel    { background: rgba(93,215,160,0.1); border-color: rgba(93,215,160,0.4); }
+.mat-ch-item.gyro   .mat-ch-type { background: rgba(90,171,255,0.18); color: #5aabff; }
+.mat-ch-item.emg    .mat-ch-type { background: rgba(93,215,160,0.18); color: var(--accent); }
+.mat-ch-item.acc    .mat-ch-type { background: rgba(255,180,50,0.18); color: var(--yellow); }
+.mat-ch-item.other  .mat-ch-type { background: rgba(255,255,255,0.08); color: var(--text-mid); }
+.mat-ch-type {
+  font-size: 0.68rem; font-weight: 700; font-family: var(--mono);
+  padding: 2px 7px; border-radius: 5px; white-space: nowrap; letter-spacing: 0.04em;
+}
+.mat-ch-name { font-size: 0.82rem; color: var(--text); flex: 1; font-family: var(--mono); }
+.mat-ch-fs   { font-size: 0.75rem; color: var(--text-mid); white-space: nowrap; font-family: var(--mono); }
+.mat-warn-box {
+  background: rgba(255,180,50,0.08); border: 1px solid rgba(255,180,50,0.3);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 12px;
+}
+.mat-warn-box p { font-size: 0.82rem; color: var(--yellow); margin: 0 0 6px; line-height: 1.7; }
+.mat-warn-box p:last-child { margin-bottom: 0; }
+.mat-warn-box code {
+  background: rgba(255,255,255,0.07); border-radius: 4px;
+  padding: 1px 6px; font-family: var(--mono); font-size: 0.79rem;
+}
+.mat-info-row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-bottom: 1px solid var(--border); font-size: 0.8rem; }
+.mat-info-row:last-child { border-bottom: none; }
+.mat-info-key { color: var(--text-mid); min-width: 100px; }
+.mat-info-val { color: var(--text); font-family: var(--mono); }
 </style>
 </head>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 <body>
 
 <div id="toast-container"></div>
@@ -1047,7 +1114,7 @@ canvas {
             <div class="form-label">Kaynak</div>
             <select id="gyro-source" onchange="onGyroSourceChange()">
               <option value="sim">Simüle Edilmiş Veri</option>
-              <option value="csv">CSV Dosyası Yükle</option>
+              <option value="csv">CSV / .mat Dosyası Yükle</option>
             </select>
           </div>
 
@@ -1089,10 +1156,11 @@ canvas {
           <div id="gyro-csv-params" style="display:none">
             <div class="drop-zone" id="gyro-drop-zone" onclick="document.getElementById('gyro-file-input').click()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-              <p>CSV yükle — tek sütun <strong>°/s</strong> verisi</p>
+              <p>CSV veya <strong>.mat</strong> yükle — Delsys Trigno Lab</p>
+              <p style="font-size:0.72rem;color:var(--text-mid);margin-top:4px">.csv → tek sütun °/s &nbsp;|&nbsp; .mat → kanal seçici açılır</p>
             </div>
             <div class="file-info" id="gyro-file-info"></div>
-            <input type="file" id="gyro-file-input" accept=".csv" style="display:none" onchange="handleGyroFile(this)">
+            <input type="file" id="gyro-file-input" accept=".csv,.mat" style="display:none" onchange="handleGyroFile(this)">
             <div class="form-group" style="margin-bottom:0">
               <div class="form-label">Örnekleme Frekansı<span class="val"><span id="gyro-csv-fs-val">200</span> Hz</span></div>
               <input type="number" id="gyro-csv-fs" value="200" min="1" max="5000"
@@ -2288,10 +2356,17 @@ function onGyroSourceChange() {
   document.getElementById('gyro-csv-params').style.display = src === 'csv' ? '' : 'none';
 }
 
-// ─── CSV loader ───────────────────────────────────────────────────────
+// ─── CSV / MAT loader ─────────────────────────────────────────────────
 function handleGyroFile(input) {
   if (!input.files[0]) return;
-  const file   = input.files[0];
+  const file = input.files[0];
+
+  // .mat dosyasını ayrı akışa yönlendir
+  if (file.name.toLowerCase().endsWith('.mat')) {
+    handleMatFile(file);
+    return;
+  }
+
   const reader = new FileReader();
   reader.onload = e => {
     try {
@@ -2341,7 +2416,7 @@ function runGyroAnalysis() {
     gyroState.fs          = fs;
     gyroState.duration    = dur;
   } else {
-    if (!gyroState.rawVelocity) { toast('Önce CSV yükleyin!', 'error'); return; }
+    if (!gyroState.rawVelocity) { toast('Önce CSV veya .mat yükleyin!', 'error'); return; }
     omega = gyroState.rawVelocity;
     fs    = gyroState.fs;
     addGyroLog('━━━ CSV Verisi Analiz Ediliyor ━━━', 'step');
@@ -2849,6 +2924,410 @@ window.addEventListener('load',()=>{
   toast('Delsys Noise Master hazır','info');
 });
 
+// ====================================================================
+// MAT-5 PARSER — MATLAB v5 binary (.mat) dosyaları için
+// Destekler: miMATRIX (14), miCOMPRESSED (15), Delsys tip-63 varyantı
+// Gereksinim: pako (CDN ile yüklenir, zlib açma için)
+// ====================================================================
+const Mat5 = (() => {
+  // MAT-5 sayısal veri tipleri
+  function p8(n) { return n % 8 === 0 ? n : n + 8 - n % 8; }
+
+  function readTag(v, pos, le) {
+    if (pos + 4 > v.byteLength) return null;
+    const w  = v.getUint32(pos, le);
+    const sm = w >>> 16;          // small element: üst 2 byte = nBytes
+    const tp = w & 0xFFFF;        // alt 2 byte = type
+    if (sm > 0) return { type: tp, nBytes: sm,                    dOff: pos + 4,   next: pos + 8 };
+    if (pos + 8 > v.byteLength) return null;
+    const nb = v.getUint32(pos + 4, le);
+    return   { type: tp, nBytes: nb,                    dOff: pos + 8,   next: pos + 8 + p8(nb) };
+  }
+
+  function readNums(v, t, le) {
+    const { type: tp, nBytes: nb, dOff } = t;
+    if (tp === 9) { // miDOUBLE
+      const n = nb / 8, a = new Float64Array(n);
+      for (let i = 0; i < n; i++) a[i] = v.getFloat64(dOff + i * 8, le);
+      return a;
+    }
+    if (tp === 7) { // miSINGLE
+      const n = nb / 4, a = new Float64Array(n);
+      for (let i = 0; i < n; i++) a[i] = v.getFloat32(dOff + i * 4, le);
+      return a;
+    }
+    if (tp === 5) { // miINT32
+      const n = nb / 4, a = new Float64Array(n);
+      for (let i = 0; i < n; i++) a[i] = v.getInt32(dOff + i * 4, le);
+      return a;
+    }
+    if (tp === 6) { // miUINT32
+      const n = nb / 4, a = new Float64Array(n);
+      for (let i = 0; i < n; i++) a[i] = v.getUint32(dOff + i * 4, le);
+      return a;
+    }
+    if (tp === 3) { // miINT16
+      const n = nb / 2, a = new Float64Array(n);
+      for (let i = 0; i < n; i++) a[i] = v.getInt16(dOff + i * 2, le);
+      return a;
+    }
+    if (tp === 4) { // miUINT16
+      const n = nb / 2, a = new Float64Array(n);
+      for (let i = 0; i < n; i++) a[i] = v.getUint16(dOff + i * 2, le);
+      return a;
+    }
+    if (tp === 1) { const a = new Float64Array(nb); for (let i = 0; i < nb; i++) a[i] = v.getInt8(dOff + i); return a; }  // miINT8
+    if (tp === 2) { const a = new Float64Array(nb); for (let i = 0; i < nb; i++) a[i] = v.getUint8(dOff + i); return a; } // miUINT8
+    return null;
+  }
+
+  function parseMatrix(v, startPos, le) {
+    let pos = startPos;
+    if (pos + 8 > v.byteLength) return null;
+
+    // Dizi bayrakları (her zaman 8 byte = uint32 × 2)
+    const fTag = readTag(v, pos, le);
+    if (!fTag || fTag.nBytes < 4) return null;
+    const flagVal = v.getUint32(fTag.dOff, le);
+    const mxClass = flagVal & 0xFF;
+    pos = fTag.next;
+
+    // Boyutlar
+    const dTag = readTag(v, pos, le);
+    if (!dTag) return null;
+    const dims = [];
+    for (let i = 0; i < dTag.nBytes / 4; i++) dims.push(v.getUint32(dTag.dOff + i * 4, le));
+    pos = dTag.next;
+
+    // İsim
+    const nTag = readTag(v, pos, le);
+    if (!nTag) return null;
+    let name = '';
+    for (let i = 0; i < nTag.nBytes; i++) name += String.fromCharCode(v.getUint8(nTag.dOff + i));
+    pos = nTag.next;
+
+    let data = null;
+    const nElem = dims.reduce((a, b) => a * b, 1) || 0;
+
+    if (mxClass >= 6 && mxClass <= 15) {
+      // Sayısal sınıflar (double=6..uint64=15)
+      const dt = readTag(v, pos, le);
+      if (dt) data = readNums(v, dt, le);
+
+    } else if (mxClass === 4) {
+      // mxCHAR_CLASS — char dizisi
+      const ct = readTag(v, pos, le);
+      if (ct) {
+        let s = '';
+        if (ct.type === 4 || ct.type === 13) { // miUINT16
+          const n = ct.nBytes / 2;
+          for (let i = 0; i < n; i++) s += String.fromCharCode(v.getUint16(ct.dOff + i * 2, le));
+        } else { // miUINT8 / miINT8
+          for (let i = 0; i < ct.nBytes; i++) {
+            const c = v.getUint8(ct.dOff + i);
+            if (c !== 0) s += String.fromCharCode(c);
+          }
+        }
+        data = s;
+      }
+
+    } else if (mxClass === 1) {
+      // mxCELL_CLASS — hücre dizisi; her eleman tam bir miMATRIX
+      const cells = [];
+      for (let c = 0; c < nElem; c++) {
+        if (pos + 8 > v.byteLength) break;
+        const ct = readTag(v, pos, le);
+        if (!ct) break;
+        if (ct.type === 14 && ct.nBytes > 0) {
+          const sub = parseMatrix(v, ct.dOff, le);
+          cells.push(sub);
+        } else {
+          cells.push(null);
+        }
+        pos = ct.next;
+      }
+      data = cells;
+    }
+    // mxSTRUCT(2), mxOBJECT(3), mxOPAQUE(17) vb. → data = null
+
+    return { name, class: mxClass, dims, data };
+  }
+
+  function tryDecompress(buf, off, nb, extraSkip) {
+    const arr = new Uint8Array(buf, off + extraSkip, nb - extraSkip);
+    return pako.inflate(arr).buffer;
+  }
+
+  return {
+    // Ana parse fonksiyonu: ArrayBuffer → {varAdı: {name,class,dims,data}}
+    parse(buffer) {
+      const v = new DataView(buffer);
+      if (v.byteLength < 128) throw new Error('Dosya çok küçük (< 128 byte)');
+      const e = String.fromCharCode(v.getUint8(126), v.getUint8(127));
+      if (e !== 'IM' && e !== 'MI') throw new Error('MATLAB .mat v5 sihirli sayı bulunamadı');
+      const le = (e === 'IM');
+
+      const vars = {};
+      let pos = 128;
+
+      while (pos + 8 <= buffer.byteLength) {
+        const type   = v.getUint32(pos, le);
+        const nBytes = v.getUint32(pos + 4, le);
+        if (nBytes === 0) { pos += 8; continue; }
+        if (pos + 8 + nBytes > buffer.byteLength) break;
+        const padded = p8(nBytes);
+
+        try {
+          let matBuf = null;
+
+          if (type === 15) {                 // miCOMPRESSED — standart zlib
+            matBuf = tryDecompress(buffer, pos + 8, nBytes, 0);
+          } else if (type === 63) {          // Delsys özel sıkıştırma — 4 ekstra byte başlık
+            try { matBuf = tryDecompress(buffer, pos + 8, nBytes, 4); }
+            catch (_) { matBuf = tryDecompress(buffer, pos + 8, nBytes, 0); }
+          } else if (type === 14) {          // miMATRIX sıkıştırılmamış
+            matBuf = buffer.slice(pos + 8, pos + 8 + nBytes);
+          }
+
+          if (matBuf) {
+            const mv  = new DataView(matBuf);
+            const mat = parseMatrix(mv, 0, le);
+            if (mat && mat.name) vars[mat.name] = mat;
+          }
+        } catch (_) { /* parse hatası — bu elemanı atla */ }
+
+        pos += 8 + padded;
+      }
+      return vars;
+    },
+
+    // Channels değişkeninden kanal adı listesi çıkar (N = beklenen adet)
+    getChannelNames(chVar, N) {
+      if (!chVar) return Array.from({ length: N }, (_, i) => `Kanal ${i + 1}`);
+      const { class: cls, dims, data } = chVar;
+
+      // Hücre dizisi (cell array of chars)
+      if (cls === 1 && Array.isArray(data)) {
+        return data.map((sub, i) => {
+          if (sub && sub.class === 4 && typeof sub.data === 'string') return sub.data.trim();
+          return `Kanal ${i + 1}`;
+        });
+      }
+
+      // Char dizisi [N × M] — sütun-major depolanır
+      if (cls === 4 && typeof data === 'string' && dims.length >= 2) {
+        const rows = dims[0], cols = dims[1];
+        return Array.from({ length: rows }, (_, i) => {
+          let s = '';
+          for (let j = 0; j < cols; j++) {
+            const c = data[j * rows + i];
+            if (c && c !== '\0') s += c;
+          }
+          return s.trimEnd() || `Kanal ${i + 1}`;
+        });
+      }
+
+      return Array.from({ length: N }, (_, i) => `Kanal ${i + 1}`);
+    },
+
+    // N×M matris verisinden i. satırı çıkar (sütun-major MATLAB depolaması)
+    getRow(data, rowIdx, N, M) {
+      const row = new Float64Array(M);
+      for (let j = 0; j < M; j++) row[j] = data[j * N + rowIdx];
+      return row;
+    },
+
+    // Satırın sondaki NaN değerlerini kırp
+    trimNaN(arr) {
+      let last = arr.length - 1;
+      while (last > 0 && isNaN(arr[last])) last--;
+      return arr.subarray(0, last + 1);
+    }
+  };
+})();
+
+// ── MAT modal durumu ─────────────────────────────────────────────────
+let matModalState = { channels: [], fsArr: null, dataVar: null, N: 0, M: 0, selIdx: -1, fileName: '' };
+
+// MAT dosyasını yükle ve parse et
+async function handleMatFile(file) {
+  addGyroLog(`━━━ .mat Dosya Yükleme ━━━`, 'step');
+  addGyroLog(`Dosya: ${file.name}  (${(file.size / 1e6).toFixed(2)} MB)`, 'info');
+
+  if (!window.pako) {
+    toast('pako kütüphanesi yüklenemedi — internet bağlantısı gerekli', 'error');
+    addGyroLog('pako CDN yüklenemedi', 'error');
+    return;
+  }
+
+  let vars;
+  try {
+    const buf = await file.arrayBuffer();
+    addGyroLog('İkili format okunuyor…', 'info');
+    vars = Mat5.parse(buf);
+  } catch (err) {
+    toast('.mat okuma hatası: ' + err.message, 'error');
+    addGyroLog('.mat parse hatası: ' + err.message, 'error');
+    return;
+  }
+
+  const varNames = Object.keys(vars);
+  addGyroLog(`Değişkenler: ${varNames.length > 0 ? varNames.join(', ') : '(hiç bulunamadı)'}`, 'info');
+
+  // Delsys format kontrolü
+  if (!vars.Channels && !vars.Fs) {
+    const body = `<div class="mat-warn-box"><p>Bu dosyada Delsys formatı (<code>Channels</code> + <code>Fs</code>) bulunamadı.</p>` +
+      `<p>Bulunan değişkenler: <code>${varNames.join(', ') || '—'}</code></p>` +
+      `<p>Desteklenen format: Delsys Trigno Lab → File → Export → MATLAB (.mat)</p></div>`;
+    openMatInfoModal(file.name, body, false);
+    return;
+  }
+
+  // Kanal sayısı
+  let N = 0;
+  if (vars.Fs && vars.Fs.data) N = vars.Fs.data.length;
+  else if (vars.Channels && vars.Channels.dims) N = vars.Channels.dims[0];
+  addGyroLog(`Kanal sayısı: ${N}`, 'info');
+
+  const fsArr    = vars.Fs ? vars.Fs.data : new Float64Array(N).fill(200);
+  const channels = Mat5.getChannelNames(vars.Channels, N);
+
+  // Data yoksa bilgi modalı göster
+  if (!vars.Data) {
+    const lines = [
+      `<div class="mat-warn-box">`,
+      `<p>⚠ <strong>Bu dosyada "Data" değişkeni bulunamadı</strong> — sinyal verisi yok.</p>`,
+      `<p>Bu dosya Delsys'ten <em>yalnızca zaman vektörleriyle</em> export edilmiş.</p>`,
+      `<p>Yeniden export için:</p>`,
+      `<p>1. Delsys Trigno Lab'ı açın<br>2. Kayıtlı veriyi yükleyin<br>3. <code>File → Export → MATLAB (.mat)</code><br>4. <strong>"Include Signal Data"</strong> seçili olsun</p>`,
+      `<p>Alternatif: <code>mat_to_csv.m</code> scripti — MATLAB'da <code>mat_to_csv('veri.mat',[],'GYRO')</code> çalıştırın, CSV çıkısını buraya yükleyin.</p>`,
+      `</div>`,
+      `<p style="font-size:0.8rem;color:var(--text-mid);margin:10px 0 6px">Dosyadaki <strong>${N}</strong> kanal:</p>`,
+      buildChannelTableHtml(channels, fsArr, N, true)
+    ].join('');
+    openMatInfoModal(file.name, lines, false);
+    addGyroLog('⚠ Data değişkeni yok — re-export gerekli', 'warn');
+    return;
+  }
+
+  // Data var — kanal seçici modal
+  const dataVar = vars.Data;
+  const M = dataVar.dims && dataVar.dims.length > 1 ? dataVar.dims[1] : (dataVar.data ? dataVar.data.length / N : 0);
+  addGyroLog(`Data: ${N}×${M} matris  (${(N * M * 8 / 1e6).toFixed(1)} MB float64)`, 'info');
+
+  matModalState = { channels, fsArr, dataVar, N, M: Math.round(M), selIdx: -1, fileName: file.name };
+  openMatChannelModal(file.name, channels, fsArr, N, Math.round(M));
+}
+
+// Kanal tablosu HTML'i oluştur (sadece görüntüleme)
+function buildChannelTableHtml(channels, fsArr, N, readOnly) {
+  const rows = channels.map((ch, i) => {
+    const type = ch.match(/GYRO/i) ? 'GYRO' : ch.match(/EMG/i) ? 'EMG' : ch.match(/ACC/i) ? 'ACC' : '—';
+    const cls  = type === 'GYRO' ? 'gyro' : type === 'EMG' ? 'emg' : type === 'ACC' ? 'acc' : 'other';
+    const fs   = fsArr && fsArr[i] ? fsArr[i].toFixed(1) : '?';
+    const sel  = readOnly ? '' : `data-idx="${i}"`;
+    return `<li class="mat-ch-item ${cls}" ${sel}><span class="mat-ch-type">${type}</span>` +
+           `<span class="mat-ch-name">${ch}</span><span class="mat-ch-fs">${fs} Hz</span></li>`;
+  }).join('');
+  return `<ul class="mat-ch-list">${rows}</ul>`;
+}
+
+// Bilgi modalı (Data yok veya format hatası)
+function openMatInfoModal(fileName, bodyHtml, canSelect) {
+  document.getElementById('mat-modal-title').textContent = 'Dosya Bilgisi — ' + fileName;
+  document.getElementById('mat-modal-sub').textContent   = canSelect ? 'Yüklenecek kanalı seçin' : 'Sinyal verisi yok';
+  document.getElementById('mat-modal-body').innerHTML    = bodyHtml;
+  document.getElementById('mat-modal-ok').disabled       = true;
+  document.getElementById('mat-modal-overlay').style.display = 'flex';
+}
+
+// Kanal seçici modal (Data var)
+function openMatChannelModal(fileName, channels, fsArr, N, M) {
+  document.getElementById('mat-modal-title').textContent = 'Kanal Seç — ' + fileName;
+  document.getElementById('mat-modal-sub').textContent   = `${N} kanal · ${M} örnek · GYRO kanalını seçip yükleyin`;
+  document.getElementById('mat-modal-ok').disabled       = true;
+
+  // Filtre + liste
+  const body = [
+    `<input class="mat-ch-filter" id="mat-ch-filter" placeholder="Filtrele: GYRO, EMG, ACC veya kanal adı…" oninput="filterMatChannels(this.value)">`,
+    `<p style="font-size:0.75rem;color:var(--text-mid);margin:0 0 8px">Jiroskop sekmesi için <strong>GYRO</strong> kanallarından birini seçin.</p>`,
+    `<div id="mat-ch-list-wrap">`,
+    buildChannelTableHtml(channels, fsArr, N, false),
+    `</div>`
+  ].join('');
+
+  document.getElementById('mat-modal-body').innerHTML = body;
+
+  // Kanal tıklama olayları
+  document.querySelectorAll('#mat-modal-body .mat-ch-item').forEach(li => {
+    li.addEventListener('click', () => {
+      document.querySelectorAll('#mat-modal-body .mat-ch-item').forEach(x => x.classList.remove('sel'));
+      li.classList.add('sel');
+      matModalState.selIdx = parseInt(li.dataset.idx);
+      document.getElementById('mat-modal-ok').disabled = false;
+    });
+  });
+
+  // Başlangıçta GYRO kanallarını filtrele
+  filterMatChannels('GYRO');
+  document.getElementById('mat-modal-overlay').style.display = 'flex';
+}
+
+// Kanal listesini filtrele
+function filterMatChannels(q) {
+  const lq = q.toLowerCase();
+  document.querySelectorAll('#mat-modal-body .mat-ch-item').forEach(li => {
+    const name = li.querySelector('.mat-ch-name').textContent.toLowerCase();
+    const type = li.querySelector('.mat-ch-type').textContent.toLowerCase();
+    li.style.display = (!lq || name.includes(lq) || type.includes(lq)) ? '' : 'none';
+  });
+  const inp = document.getElementById('mat-ch-filter');
+  if (inp && inp.value !== q) inp.value = q;
+}
+
+// Seçili kanalı gyroState'e yükle
+function applyMatChannel() {
+  const { channels, fsArr, dataVar, N, M, selIdx, fileName } = matModalState;
+  if (selIdx < 0 || !dataVar || !dataVar.data) { toast('Kanal seçilmedi!', 'error'); return; }
+
+  try {
+    const rawData = dataVar.data;   // Float64Array, N×M sütun-major
+    let row = Mat5.getRow(rawData, selIdx, N, M);
+    row = Mat5.trimNaN(row);        // Sondaki NaN'ları kırp
+
+    if (row.length < 10) { toast('Bu kanalda yeterli veri yok!', 'error'); return; }
+
+    const fs      = fsArr ? fsArr[selIdx] : 200;
+    const chName  = channels[selIdx] || `Kanal ${selIdx + 1}`;
+
+    gyroState.rawVelocity = row;
+    gyroState.fs          = fs;
+
+    const info = document.getElementById('gyro-file-info');
+    info.textContent = `✓ ${fileName}  ·  ${chName}  ·  ${row.length} örnek  ·  ${fs.toFixed(1)} Hz`;
+    info.style.display = 'block';
+
+    addGyroLog(`Kanal yüklendi: ${chName} | ${row.length} örnek | Fs=${fs.toFixed(1)} Hz`, 'success');
+    toast(`${chName} yüklendi (${row.length} örnek)`, 'success');
+
+    closeMatModal();
+    // CSV kaynağına geç (gerekirse)
+    const srcSel = document.getElementById('gyro-source');
+    if (srcSel.value !== 'csv') { srcSel.value = 'csv'; onGyroSourceChange(); }
+  } catch (err) {
+    toast('Kanal yükleme hatası: ' + err.message, 'error');
+    addGyroLog('Kanal yükleme hatası: ' + err.message, 'error');
+  }
+}
+
+function closeMatModal() {
+  document.getElementById('mat-modal-overlay').style.display = 'none';
+}
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeMatModal();
+});
+
 window.addEventListener('resize',()=>{
   ['p-signal-canvas','p-psd-canvas','p-freq-resp-canvas',
    's-signal-canvas','s-psd-canvas','s-freq-resp-canvas',
@@ -2858,5 +3337,27 @@ window.addEventListener('resize',()=>{
   drawAngleChart('g-angle-canvas', gyroState.angle, gyroState.fs, gyroState.targetAngle, gyroState.showTarget, gyroState.angleRaw);
 });
 </script>
+
+<!-- ── MAT dosya kanal seçici modal ── -->
+<div id="mat-modal-overlay" class="mat-modal-overlay" style="display:none" onclick="if(event.target===this)closeMatModal()">
+  <div class="mat-modal" role="dialog" aria-modal="true">
+    <div class="mat-modal-header">
+      <div>
+        <div class="mat-modal-title" id="mat-modal-title">Kanal Seç</div>
+        <div class="mat-modal-sub" id="mat-modal-sub"></div>
+      </div>
+      <button class="mat-modal-close" onclick="closeMatModal()" aria-label="Kapat">✕</button>
+    </div>
+    <div class="mat-modal-body" id="mat-modal-body">
+      <!-- doldurulur -->
+    </div>
+    <div class="mat-modal-footer">
+      <button class="btn btn-secondary" onclick="closeMatModal()">İptal</button>
+      <button class="btn btn-primary" id="mat-modal-ok" onclick="applyMatChannel()" disabled>
+        Seçili Kanalı Yükle
+      </button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
