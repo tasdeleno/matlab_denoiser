@@ -12,6 +12,7 @@ function filtered = advanced_filter(signal, fs, filter_type, params)
 %   fs          : Örnekleme frekansı [Hz]
 %   filter_type : Filtre tipi string:
 %                   'butterworth' — Bant geçiren Butterworth filtresi
+%                   'lowpass'     — Alçak geçiren Butterworth filtresi
 %                   'notch'       — Çentik (Notch) filtresi
 %                   'wavelet'     — Wavelet gürültü giderme
 %   params      : Struct — filtre parametreleri (tiplerine göre aşağıda)
@@ -20,6 +21,11 @@ function filtered = advanced_filter(signal, fs, filter_type, params)
 %     params.low   : Alt kesme frekansı [Hz] (varsayılan: 20)
 %     params.high  : Üst kesme frekansı [Hz] (varsayılan: 450)
 %     params.order : Filtre mertebesi    (varsayılan: 4)
+%
+%   LOWPASS params alanları:
+%     params.cutoff : Kesme frekansı [Hz] (varsayılan: 10)
+%     params.order  : Filtre mertebesi    (varsayılan: 4)
+%     Kullanım: IMU GYRO envelope (10 Hz), EMG rectified envelope (10 Hz)
 %
 %   NOTCH params alanları:
 %     params.f_notch : Çentik frekansı [Hz] (varsayılan: 50)
@@ -157,8 +163,26 @@ switch lower(strtrim(filter_type))
                   ME.message);
         end
 
+    % =====================================================================
+    % YÖNTEM 4: ALÇAK GEÇİREN (LOW-PASS) BUTTERWORTH
+    % =====================================================================
+    % Kullanım alanları:
+    %   • IMU GYRO sinyali: yavaş hareketlerde >10 Hz gürültü kesilir
+    %   • EMG tam-dalga rectification sonrası envelope çıkarma (10 Hz)
+    case 'lowpass'
+        cutoff = get_param(params, 'cutoff', 10);
+        order  = get_param(params, 'order',   4);
+
+        nyq = fs / 2;
+        Wn  = max(0.001, min(cutoff / nyq, 0.999));   % 0<Wn<1 zorunlu
+
+        [b, a] = butter(order, Wn, 'low');
+        filtered = filtfilt(b, a, signal);
+
+        fprintf('[advanced_filter] Low-pass: %.1f Hz | Mertebe: %d\n', cutoff, order);
+
     otherwise
-        error('[advanced_filter] Bilinmeyen filtre tipi: "%s"\nGeçerli tipler: butterworth, notch, wavelet', ...
+        error('[advanced_filter] Bilinmeyen filtre tipi: "%s"\nGeçerli tipler: butterworth, lowpass, notch, wavelet', ...
               filter_type);
 end  % switch
 
